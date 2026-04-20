@@ -51,7 +51,8 @@ def login(request: LoginRequest):
 class RegistroRequest(BaseModel):
     id_usuario: int
     emocion: str
-    detalle: str
+    detalle: str # <--- Agrega esto si no está
+    puntuacion_riesgo: float # Esto lo envía Flutter, pero tú calculas otro 'riesgo' abajo
 
 @app.post("/registro_animo")
 def registrar_animo(request: RegistroRequest):
@@ -59,18 +60,45 @@ def registrar_animo(request: RegistroRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # Guardamos en la tabla que ya creamos en MySQL
-        query = "INSERT INTO RegistroAnimo (id_usuario, emocion, puntuacion_riesgo) VALUES (%s, %s, %s)"
+        # El query está bien, pero necesitamos pasarle el cuarto valor
+        query = "INSERT INTO RegistroAnimo (id_usuario, emocion, puntuacion_riesgo, detalle) VALUES (%s, %s, %s, %s)"
         
-        # Algoritmo de riesgo "Express" para la Hackathon:
-        # Si dice "Crisis", el riesgo es alto (0.9), si no, bajo (0.1)
-        riesgo = 0.9 if request.emocion == 'Crisis' else 0.1
+        # Algoritmo de riesgo
+        riesgo_calculado = 0.9 if request.emocion == 'Crisis' else 0.1
         
-        cursor.execute(query, (request.id_usuario, request.emocion, riesgo))
+        # PASAMOS LOS 4 VALORES (Asegúrate de incluir request.detalle al final)
+        cursor.execute(query, (request.id_usuario, request.emocion, riesgo_calculado, request.detalle))
+        
         conn.commit()
-        
         cursor.close()
         conn.close()
         return {"status": "success", "message": "Animo guardado"}
+    except Exception as e:
+        print(f"ERROR REAL: {e}") # Esto te dirá el error exacto en terminal
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/historial_animo/{id_usuario}")
+def obtener_historial(id_usuario: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # Obtenemos los últimos 7 registros ordenados por fecha
+        query = """SELECT emocion, fecha_hora 
+                   FROM RegistroAnimo 
+                   WHERE id_usuario = %s 
+                   ORDER BY fecha_hora DESC LIMIT 7"""
+        
+        cursor.execute(query, (id_usuario,))
+        registros = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        # Formateamos la fecha para que Flutter la lea fácil
+        for r in registros:
+            r['fecha_hora'] = r['fecha_hora'].strftime("%d/%m %H:%M")
+            
+        return registros
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
