@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http; // <--- OBLIGATORIO
 import 'dart:convert';
+import 'package:salud_tec_final/api_config.dart';
 
 class PrincipalScreen extends StatefulWidget {
   const PrincipalScreen({super.key});
@@ -55,8 +56,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   
 Future<void> _obtenerHistorial() async {
     try {
+      // Cambio: Construimos la URL dinámicamente
       final response = await http.get(
-        Uri.parse("http://192.168.100.164:8000/historial_animo/2"),
+        Uri.parse("${ApiConfig.baseUrl}/historial_animo/2"), 
       );
       if (response.statusCode == 200) {
         setState(() {

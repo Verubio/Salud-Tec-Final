@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:salud_tec_final/api_config.dart';
 
 class RegistroEmo extends StatefulWidget {
   const RegistroEmo({super.key});
@@ -15,8 +16,8 @@ class _RegistroEmoState extends State<RegistroEmo> {
   String _gifActual = "assets/carita_neutra.gif";
   bool _estaCargando = false;
 
-  // IMPORTANTE: Asegúrate de que esta IP sea la de tu laptop
-  final String _urlBackend = "http://192.168.100.164:8000/registro_animo";
+  // Cambio: Ahora es una variable que jala de la configuración global
+  final String _urlBackend = "${ApiConfig.baseUrl}/registro_animo";
 
   @override
   void didChangeDependencies() {

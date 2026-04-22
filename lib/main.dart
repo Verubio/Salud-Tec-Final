@@ -4,6 +4,7 @@ import 'screens/chat_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/principal_screen.dart';
 import 'screens/registro_emo.dart';
+import 'package:salud_tec_final/screens/biblio_recu.dart';
 
 void main() {
   runApp(const MyApp());

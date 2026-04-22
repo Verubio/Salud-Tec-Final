@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:salud_tec_final/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -28,7 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    final url = Uri.parse('http://192.168.100.164:8000/login');
+    // Cambio: Usamos la variable centralizada
+    final url = Uri.parse('${ApiConfig.baseUrl}/login');
 
     try {
       final response = await http.post(
