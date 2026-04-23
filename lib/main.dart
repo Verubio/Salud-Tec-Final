@@ -5,6 +5,7 @@ import 'screens/login_screen.dart';
 import 'screens/principal_screen.dart';
 import 'screens/registro_emo.dart';
 import 'package:salud_tec_final/screens/biblio_recu.dart';
+import 'package:salud_tec_final/screens/chatbot.dart';
 
 void main() {
   runApp(const MyApp());
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
         '/biblioteca': (context) => const BiblioRecu(),
         '/chat': (context) => const ChatScreen(),
         '/registro': (context) => const RegistroEmo(),
+        '/chatbot': (context) => const ChatBotScreen(),
       },
     );
   }

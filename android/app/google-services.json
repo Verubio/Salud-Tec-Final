@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "95488820712",
+    "project_id": "saludtec",
+    "storage_bucket": "saludtec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:95488820712:android:88e7a872976c613933905d",
+        "android_client_info": {
+          "package_name": "com.example.salud_tec_final"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYzEPkkvbn04Nscm0a-xba2a0cDcJHmJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
