@@ -16,10 +16,14 @@ class ChatBotScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Icono de robot para que se vea pro
-            const Icon(Icons.smart_toy_rounded, size: 100, color: Color(0xFF2C5F78)),
+            const Icon(
+              Icons.smart_toy_rounded,
+              size: 100,
+              color: Color(0xFF2C5F78),
+            ),
             const SizedBox(height: 20),
             const Text(
-              "NexusBot está despertando...",
+              "NexusBot apenas está despertando...",
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -32,7 +36,7 @@ class ChatBotScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 30),
-            
+
             // BOTÓN DE PRUEBA
             ElevatedButton.icon(
               onPressed: () {

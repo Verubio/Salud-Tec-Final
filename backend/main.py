@@ -2,10 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
+from datetime import datetime
 
 app = FastAPI()
 
-# Configuración obligatoria para que Flutter se conecte
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,7 +13,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuración de tu MySQL (¡CAMBIA EL PASSWORD!)
 db_config = {
     'host': 'localhost',
     'user': 'root',
@@ -21,8 +20,25 @@ db_config = {
     'database': 'nexus4_db'
 }
 
+# --- MODELOS DE DATOS ---
+
 class LoginRequest(BaseModel):
     correo: str
+    password: str  # <--- ACTUALIZADO: Ahora el backend pide contraseña
+
+class UserRegister(BaseModel):
+    nombre_completo: str
+    correo: str
+    password: str
+    carrera: str
+
+class RegistroRequest(BaseModel):
+    id_usuario: int
+    emocion: str
+    detalle: str 
+    puntuacion_riesgo: float
+
+# --- ENDPOINTS ---
 
 @app.post("/login")
 def login(request: LoginRequest):
@@ -30,9 +46,9 @@ def login(request: LoginRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # Validación institucional del dominio @itslp.tecnm.mx
-        query = "SELECT id_usuario, nombre_completo, rol FROM Usuario WHERE correo_institucional = %s"
-        cursor.execute(query, (request.correo,))
+        # RIGOR DE SEGURIDAD (7.2): Validamos correo Y contraseña
+        query = "SELECT id_usuario, nombre_completo FROM Usuario WHERE correo_institucional = %s AND password_hash = %s"
+        cursor.execute(query, (request.correo, request.password))
         user = cursor.fetchone()
         
         cursor.close()
@@ -41,18 +57,33 @@ def login(request: LoginRequest):
         if user:
             return {"status": "success", "user": user}
         else:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado en el padrón del Tec")
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Iniciar con: uvicorn main:app --reload --host 0.0.0.0
-
-class RegistroRequest(BaseModel):
-    id_usuario: int
-    emocion: str
-    detalle: str # <--- Agrega esto si no está
-    puntuacion_riesgo: float # Esto lo envía Flutter, pero tú calculas otro 'riesgo' abajo
+@app.post("/register")
+def register(user: UserRegister):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+        
+        # Eliminamos la coma extra y mantenemos tu orden preferido
+        query = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera) 
+                   VALUES (%s, %s, %s, 'Alumno', %s)"""
+        
+        # IMPORTANTE: El orden aquí debe ser el mismo que en los paréntesis de arriba
+        valores = (user.nombre_completo, user.correo, user.password, user.carrera)
+        
+        cursor.execute(query, valores)
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        return {"status": "success", "message": "Usuario creado correctamente"}
+    except Exception as e:
+        print(f"DEBUG ERROR REGISTRO: {e}") # Mira esto en tu terminal
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/registro_animo")
 def registrar_animo(request: RegistroRequest):
@@ -60,13 +91,9 @@ def registrar_animo(request: RegistroRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # El query está bien, pero necesitamos pasarle el cuarto valor
         query = "INSERT INTO RegistroAnimo (id_usuario, emocion, puntuacion_riesgo, detalle) VALUES (%s, %s, %s, %s)"
-        
-        # Algoritmo de riesgo
         riesgo_calculado = 0.9 if request.emocion == 'Crisis' else 0.1
         
-        # PASAMOS LOS 4 VALORES (Asegúrate de incluir request.detalle al final)
         cursor.execute(query, (request.id_usuario, request.emocion, riesgo_calculado, request.detalle))
         
         conn.commit()
@@ -74,7 +101,6 @@ def registrar_animo(request: RegistroRequest):
         conn.close()
         return {"status": "success", "message": "Animo guardado"}
     except Exception as e:
-        print(f"ERROR REAL: {e}") # Esto te dirá el error exacto en terminal
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/historial_animo/{id_usuario}")
@@ -83,11 +109,13 @@ def obtener_historial(id_usuario: int):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # Obtenemos los últimos 7 registros ordenados por fecha
-        query = """SELECT emocion, fecha_hora 
+        # CORRECCIÓN DE RIGOR: Añadimos 'detalle' al SELECT para que el popup de Flutter funcione
+        # Quitamos el LIMIT 7 para que la matriz semanal pueda mostrar múltiples registros por día (Criterio 7.1)
+        query = """SELECT emocion, fecha_hora, detalle 
                    FROM RegistroAnimo 
                    WHERE id_usuario = %s 
-                   ORDER BY fecha_hora DESC LIMIT 7"""
+                   AND fecha_hora >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                   ORDER BY fecha_hora DESC"""
         
         cursor.execute(query, (id_usuario,))
         registros = cursor.fetchall()
@@ -95,9 +123,8 @@ def obtener_historial(id_usuario: int):
         cursor.close()
         conn.close()
         
-        # Formateamos la fecha para que Flutter la lea fácil
         for r in registros:
-            r['fecha_hora'] = r['fecha_hora'].strftime("%d/%m %H:%M")
+            r['fecha_hora'] = r['fecha_hora'].strftime("%Y-%m-%d %H:%M:%S")
             
         return registros
     except Exception as e:

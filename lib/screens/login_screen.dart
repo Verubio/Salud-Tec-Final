@@ -45,11 +45,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        
+        // Extraemos los datos del usuario del JSON que manda FastAPI
         final String nombreUsuario = data['user']['nombre_completo'];
+        final int idUsuario = data['user']['id_usuario']; // Asegúrate que este nombre coincida con tu backend
 
-        if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/home', arguments: nombreUsuario);
-      } else {
+       if (!mounted) return;
+
+        // ENVIAMOS UN MAPA COMO ARGUMENTO
+        Navigator.pushReplacementNamed(
+          context, 
+          '/home', 
+          arguments: {
+            'nombre': nombreUsuario,
+            'id_usuario': idUsuario,
+            },
+          );
+        } else {
         _mostrarError("Credenciales incorrectas o usuario no encontrado.");
       }
     } catch (e) {
@@ -136,18 +148,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 // <-- NUEVO: Botón para ir a registrarse
                TextButton(
   onPressed: () {
-    // Muestra un mensaje emergente en lugar de cambiar de pantalla
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("La pantalla de registro estará disponible pronto."),
-        backgroundColor: Colors.blueGrey,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    // Esto buscará la ruta que definiremos en main.dart
+    Navigator.pushNamed(context, '/registro_usuario');
   },
   child: const Text(
     "¿No tienes cuenta? Regístrate aquí",
-    style: TextStyle(color: Color(0xFF2C5F78)),
+    style: TextStyle(color: Color(0xFF2C5F78), fontWeight: FontWeight.bold),
   ),
 )
               ],
