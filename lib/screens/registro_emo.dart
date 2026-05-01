@@ -14,28 +14,34 @@ class _RegistroEmoState extends State<RegistroEmo> {
   final TextEditingController _detalleController = TextEditingController();
   String _emocionSeleccionada = "Estable";
   String _gifActual = "assets/carita_neutra.gif";
+  int _userIdActual = 2; // Valor de respaldo
   bool _estaCargando = false;
 
-  // Cambio: Ahora es una variable que jala de la configuración global
   final String _urlBackend = "${ApiConfig.baseUrl}/registro_animo";
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RECIBIR ARGUMENTOS DESDE EL HOME
-    final args = ModalRoute.of(context)!.settings.arguments as Map<String, String>?;
+    // RECIBIR ARGUMENTOS: Cambiamos String por dynamic para aceptar el ID (int)
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+
     if (args != null) {
-      _emocionSeleccionada = args['emocion']!;
-      _gifActual = args['gif']!;
+      setState(() {
+        _emocionSeleccionada = args['emocion']!;
+        _gifActual = args['gif']!;
+        // Recuperamos el ID real para que no se use el 2 por defecto
+        _userIdActual = args['id_usuario'] ?? 2;
+      });
     }
   }
 
   Future<void> _guardarRegistro() async {
-    if (_detalleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Por favor, cuéntame un poco más sobre cómo te sientes.")),
-      );
-      return;
+    // AJUSTE CP02: El reporte dice que se puede guardar sin texto
+    // Solo mandamos un aviso si está vacío, pero permitimos el flujo.
+    String detalleFinal = _detalleController.text.trim();
+    if (detalleFinal.isEmpty) {
+      detalleFinal = "No agregaste una nota en este registro.";
     }
 
     setState(() => _estaCargando = true);
@@ -45,76 +51,116 @@ class _RegistroEmoState extends State<RegistroEmo> {
         Uri.parse(_urlBackend),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
-          "id_usuario": 2, // En producción, esto vendría del Login
+          "id_usuario": _userIdActual, // YA NO ES UN 2 ESTÁTICO
           "emocion": _emocionSeleccionada,
-          "detalle": _detalleController.text,
+          "detalle": detalleFinal,
           "puntuacion_riesgo": _calcularRiesgo(_emocionSeleccionada),
         }),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
+        // Criterio de Usabilidad 7.4: Feedback visual inmediato[cite: 2]
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text("¡Registro guardado! Gracias por compartir.")),
+          const SnackBar(
+            backgroundColor: Colors.green,
+            content: Text(
+              "¡Registro guardado! Tu historial se ha actualizado.",
+            ),
+          ),
         );
         Navigator.pop(context); // Regresa al Home
       } else {
-        throw Exception("Error del servidor");
+        throw Exception("Error del servidor: ${response.statusCode}");
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(backgroundColor: Colors.red, content: Text("No se pudo conectar con el servidor: $e")),
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text("No se pudo conectar con el servidor: $e"),
+        ),
       );
     } finally {
-      setState(() => _estaCargando = false);
+      if (mounted) setState(() => _estaCargando = false);
     }
   }
 
   double _calcularRiesgo(String emocion) {
     if (emocion == 'Crisis') return 10.0;
     if (emocion == 'Estresado') return 7.0;
-    if (emocion == 'Triste') return 5.0;
     return 1.0;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Registrar Ánimo"), backgroundColor: const Color(0xFF2C5F78), foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text("Registrar Ánimo"),
+        backgroundColor: const Color(0xFF2C5F78),
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(25),
         child: Column(
           children: [
-            const Text("Tu selección actual:", style: TextStyle(fontSize: 16, color: Colors.grey)),
+            const Text(
+              "Tu selección actual:",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
             const SizedBox(height: 10),
             Image.asset(_gifActual, height: 120),
-            Text(_emocionSeleccionada, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2C5F78))),
+            Text(
+              _emocionSeleccionada,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2C5F78),
+              ),
+            ),
             const SizedBox(height: 30),
-            
+
             TextField(
               controller: _detalleController,
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: "¿Qué está pasando por tu mente?",
                 hintText: "Escribe aquí tus pensamientos...",
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF2C5F78), width: 2)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF2C5F78),
+                    width: 2,
+                  ),
+                ),
               ),
             ),
-            
+
             const SizedBox(height: 30),
-            
-            _estaCargando 
-              ? const CircularProgressIndicator()
-              : ElevatedButton(
-                  onPressed: _guardarRegistro,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2C5F78),
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(double.infinity, 60),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+
+            _estaCargando
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: _guardarRegistro,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2C5F78),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 60),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    child: const Text(
+                      "GUARDAR EN MI BITÁCORA",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                  child: const Text("GUARDAR EN MI BITÁCORA", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                ),
           ],
         ),
       ),

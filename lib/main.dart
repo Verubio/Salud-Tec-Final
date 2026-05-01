@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:salud_tec_final/screens/register_screen.dart';
 import 'screens/biblio_recu.dart';
 import 'screens/chat_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/principal_screen.dart';
 import 'screens/registro_emo.dart';
-import 'package:salud_tec_final/screens/biblio_recu.dart';
+import 'package:salud_tec_final/screens/chatbot.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,7 +26,7 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF2C5F78),
           primary: const Color(0xFF2C5F78),
           secondary: const Color(0xFF84A98C),
-          surface: const Color(0xFFF8F9FA),
+          surface: const Color(0xFFF8F9FA),                                 
         ),
         // Configurando tipografías (Asegúrate de agregarlas a pubspec.yaml)
         fontFamily: 'Inter',
@@ -41,6 +42,8 @@ class MyApp extends StatelessWidget {
         '/biblioteca': (context) => const BiblioRecu(),
         '/chat': (context) => const ChatScreen(),
         '/registro': (context) => const RegistroEmo(),
+        '/chatbot': (context) => const ChatBotScreen(),
+        '/registro_usuario': (context) => const RegisterScreen(),
       },
     );
   }
