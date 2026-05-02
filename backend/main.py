@@ -3,9 +3,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
 from datetime import datetime
+import os
+from google import genai  # <--- Fíjate que el import también cambió un poquito
 
 app = FastAPI()
 
+# --- CONFIGURACIÓN DE GEMINI ---
+# Aquí inicializamos el cliente con tu llave directamente para asegurar la prueba
+client = genai.Client(api_key="AIzaSyA1nlKWL9dUgcvI1vBWHmkzr3sstB-rJZM")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,7 +28,7 @@ app.add_middleware(
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': 'Luis2911', 
+    'password': 'PeyPerritu1*', 
     'database': 'nexus4_db'
 }
 
@@ -128,4 +140,89 @@ def obtener_historial(id_usuario: int):
             
         return registros
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# --- LÓGICA DEL NEXUSBOT ---
+
+SYSTEM_PROMPT = """
+Eres NexusBot, un asistente emocional para estudiantes universitarios.
+
+Tu objetivo:
+- Brindar apoyo emocional breve, claro y empático.
+- Ayudar con estrés académico, ansiedad leve y motivación.
+
+Reglas estrictas:
+- NO des diagnósticos médicos o psicológicos.
+- NO des instrucciones clínicas.
+- NO sugieras medicamentos.
+- NO reemplazas a un profesional.
+
+Estilo:
+- Responde en máximo 2-3 líneas.
+- Usa lenguaje cálido, cercano y sencillo.
+- Sé empático, como un amigo que escucha.
+
+Contexto:
+El usuario presenta: {contexto}
+
+Instrucciones:
+- Da un consejo práctico y sencillo.
+- Puedes sugerir respiración, pausas, organización o hablar con alguien.
+- No repitas exactamente la misma respuesta siempre.
+"""
+
+PALABRAS_CRISIS = [
+    "no puedo más", "quiero morir", "suicidio", "ya no quiero vivir", 
+    "terminar con todo", "me quiero matar", "crisis"
+]
+
+def detectar_crisis(mensaje: str) -> bool:
+    mensaje = mensaje.lower()
+    return any(p in mensaje for p in PALABRAS_CRISIS)
+
+def detectar_contexto(mensaje: str) -> str:
+    mensaje = mensaje.lower()
+    if any(p in mensaje for p in ["examen", "tarea", "proyecto", "escuela", "compilador", "semestre"]):
+        return "estrés académico"
+    if any(p in mensaje for p in ["ansiedad", "nervioso", "preocupado"]):
+        return "ansiedad leve"
+    if any(p in mensaje for p in ["triste", "desanimado", "solo"]):
+        return "tristeza"
+    return "apoyo emocional general"
+
+class ChatRequest(BaseModel):
+    id_usuario: int
+    mensaje: str
+
+@app.post("/chatbot")
+async def chatbot(request: ChatRequest):
+    try:
+        mensaje = request.mensaje
+
+        # 🚨 FILTRO 1: CRISIS (Se responde sin gastar tokens de la IA)
+        if detectar_crisis(mensaje):
+            return {
+                "reply": "Lo que estás sintiendo es importante 💙 No estás solo/a. Te recomiendo hablar con un profesional o alguien de confianza lo antes posible. Si puedes, busca apoyo ahora mismo."
+            }
+
+        # 🧠 FILTRO 2: CONTEXTO
+        contexto = detectar_contexto(mensaje)
+
+  # 🤖 FILTRO 3: GEMINI
+        prompt_final = SYSTEM_PROMPT.format(contexto=contexto) + f"\nUsuario: {mensaje}"
+        
+       
+        response = client.models.generate_content(
+            model='gemini-2.0-flash', 
+            contents=prompt_final
+        )
+
+        return {"reply": response.text}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(f"🔥 ERROR DEL BOT: {e}") # <--- Agrega esta línea
         raise HTTPException(status_code=500, detail=str(e))

@@ -23,10 +23,10 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         // Aplicando la paleta "Serenidad y Confianza"
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2C5F78),
-          primary: const Color(0xFF2C5F78),
+          seedColor: const Color.fromARGB(255, 221, 115, 203),
+          primary: const Color.fromARGB(255, 128, 200, 236),
           secondary: const Color(0xFF84A98C),
-          surface: const Color(0xFFF8F9FA),                                 
+          surface: const Color(0xFFF8F9FA),
         ),
         // Configurando tipografías (Asegúrate de agregarlas a pubspec.yaml)
         fontFamily: 'Inter',
