@@ -183,7 +183,18 @@ def iniciar_sesion_chat(req: InicioChatRequest):
         sesion = cursor.fetchone()
         
         if not sesion:
-            # Si no existe, creamos una nueva sesión
+            # RIGOR TÉCNICO: La sesión no existe. Antes de crearla, verificamos si el Doc está disponible
+            query_disponibilidad = "SELECT esta_disponible FROM Usuario WHERE id_usuario = %s AND rol = 'Psicologo'"
+            cursor.execute(query_disponibilidad, (req.id_psicologo,))
+            psicologo = cursor.fetchone()
+            
+            # Si el doc no existe o su switch está en FALSE, abortamos la misión
+            if not psicologo or psicologo['esta_disponible'] == 0:
+                cursor.close()
+                conn.close()
+                raise HTTPException(status_code=400, detail="El profesional ya no se encuentra disponible.")
+            
+            # Si pasó el filtro de seguridad, creamos la sesión
             cursor.execute("INSERT INTO SesionChat (id_alumno, id_psicologo) VALUES (%s, %s)", 
                            (req.id_alumno, req.id_psicologo))
             conn.commit()
@@ -191,7 +202,7 @@ def iniciar_sesion_chat(req: InicioChatRequest):
         else:
             id_sesion = sesion['id_sesion']
             
-        # 2. Obtenemos el historial de mensajes de esa sesión
+        # 2. Obtenemos el historial de mensajes
         query_mensajes = """SELECT id_usuario_emisor, mensaje, fecha_hora 
                             FROM Chat WHERE id_sesion = %s ORDER BY fecha_hora ASC"""
         cursor.execute(query_mensajes, (id_sesion,))
@@ -200,11 +211,13 @@ def iniciar_sesion_chat(req: InicioChatRequest):
         cursor.close()
         conn.close()
         
-        # Formatear fechas para JSON
         for m in mensajes:
             m['fecha_hora'] = m['fecha_hora'].strftime("%H:%M")
             
         return {"status": "success", "id_sesion": id_sesion, "mensajes": mensajes}
+    except HTTPException:
+        # Dejamos pasar los errores HTTP controlados (como el 400 que acabamos de crear)
+        raise
     except Exception as e:
         print(f"DEBUG ERROR CHAT: {e}")
         raise HTTPException(status_code=500, detail=str(e))
