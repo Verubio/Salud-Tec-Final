@@ -1,6 +1,6 @@
 class ApiConfig {
   // Solo cambias esta línea cuando lleguen a la casa de tu amigo
-  static const String baseUrl = "http://192.168.100.18:8000"; 
+  static const String baseUrl = "http://192.168.100.164:8000";
 
   // Rutas automáticas
   static const String loginUrl = "$baseUrl/login";

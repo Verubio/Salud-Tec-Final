@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:salud_tec_final/screens/lista_psicologos_screen.dart';
+import 'package:salud_tec_final/screens/psicologo_home_screen.dart';
 import 'package:salud_tec_final/screens/register_screen.dart';
 import 'screens/biblio_recu.dart';
 import 'screens/chat_screen.dart';
@@ -26,13 +28,20 @@ class MyApp extends StatelessWidget {
           seedColor: const Color(0xFF2C5F78),
           primary: const Color(0xFF2C5F78),
           secondary: const Color(0xFF84A98C),
-          surface: const Color(0xFFF8F9FA),                                 
+          surface: const Color(0xFFF8F9FA),
         ),
         // Configurando tipografías (Asegúrate de agregarlas a pubspec.yaml)
         fontFamily: 'Inter',
         textTheme: const TextTheme(
-          displayLarge: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.bold, color: Color(0xFF2C5F78)),
-          titleLarge: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+          displayLarge: TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C5F78),
+          ),
+          titleLarge: TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       initialRoute: '/',
@@ -44,6 +53,8 @@ class MyApp extends StatelessWidget {
         '/registro': (context) => const RegistroEmo(),
         '/chatbot': (context) => const ChatBotScreen(),
         '/registro_usuario': (context) => const RegisterScreen(),
+        '/seleccion_psicologo': (context) => const ListaPsicologosScreen(),
+        '/psicologo_home': (context) => const PsicologoHomeScreen(),
       },
     );
   }
