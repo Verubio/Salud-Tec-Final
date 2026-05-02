@@ -376,7 +376,13 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
             // BOTÓN DE CHAT KAWAII
             GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/chat'),
+              onTap: () => Navigator.pushNamed(
+                context,
+                '/seleccion_psicologo',
+                arguments: {
+                  'id_usuario': idUsuario,
+                }, // <-- Pasamos el ID del Alumno
+              ),
               child: Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(
