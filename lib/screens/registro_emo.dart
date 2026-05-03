@@ -22,18 +22,24 @@ class _RegistroEmoState extends State<RegistroEmo> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // RECIBIR ARGUMENTOS: Cambiamos String por dynamic para aceptar el ID (int)
+
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
 
-    if (args != null) {
-      setState(() {
-        _emocionSeleccionada = args['emocion']!;
-        _gifActual = args['gif']!;
-        // Recuperamos el ID real para que no se use el 2 por defecto
-        _userIdActual = args['id_usuario'] ?? 2;
+    // VALIDACIÓN ESTRICTA DE SEGURIDAD
+    if (args == null || args['id_usuario'] == null) {
+      // Si no hay datos o no hay ID, expulsamos al usuario al Login
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/');
       });
+      return; // Detenemos la ejecución del método
     }
+
+    setState(() {
+      _emocionSeleccionada = args['emocion']!;
+      _gifActual = args['gif']!;
+      _userIdActual = args['id_usuario']; // Adiós al ?? 2
+    });
   }
 
   Future<void> _guardarRegistro() async {

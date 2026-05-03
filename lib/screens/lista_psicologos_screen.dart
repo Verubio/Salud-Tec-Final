@@ -47,12 +47,19 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
   }
 
   Future<void> _iniciarChat(Map<String, dynamic> psicologo) async {
-    // 1. Recuperamos el ID del alumno
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-    final int idAlumno = args?['id_usuario'] ?? 2;
 
-    // RIGOR TÉCNICO: Antes de navegar, tocamos la puerta del servidor (El Gatekeeper)
+    // VALIDACIÓN ESTRICTA DE SEGURIDAD
+    if (args == null || args['id_usuario'] == null) {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/');
+      }
+      return;
+    }
+
+    final int idAlumno = args['id_usuario'];
+
     try {
       final response = await http.post(
         Uri.parse("${ApiConfig.baseUrl}/chat/iniciar"),
@@ -66,7 +73,6 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        // LUZ VERDE: El psicólogo está disponible, la sesión existe. Ahora sí, navegamos.
         final data = jsonDecode(response.body);
 
         Navigator.pushNamed(
@@ -77,19 +83,16 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
             'id_psicologo': psicologo['id_usuario'],
             'nombre_psicologo': psicologo['nombre_completo'],
             'id_emisor_actual': idAlumno,
-            'id_sesion':
-                data['id_sesion'], // Pasamos el ID validado por si el ChatScreen lo necesita
+            'id_sesion': data['id_sesion'],
           },
         );
       } else if (response.statusCode == 400) {
-        // EL BLINDAJE EN ACCIÓN: El servidor nos avisa que el Doc apagó su switch hace un milisegundo
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("El profesional acaba de desconectarse."),
             backgroundColor: Colors.orange,
           ),
         );
-        // Recargamos la lista silenciosamente para que el psicólogo desaparezca frente a sus ojos
         _obtenerPsicologos();
       } else {
         _mostrarError("Error del servidor al intentar conectar.");

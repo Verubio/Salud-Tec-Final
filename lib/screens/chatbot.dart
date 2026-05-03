@@ -19,12 +19,20 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Extraemos el ID aquí de forma segura cuando la pantalla se construye
+
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
-    idAlumnoActual = args?['id_usuario'] ?? 2;
 
-    // Si la lista está vacía, vamos por el historial al servidor
+    // VALIDACIÓN ESTRICTA DE SEGURIDAD
+    if (args == null || args['id_usuario'] == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.pushReplacementNamed(context, '/');
+      });
+      return;
+    }
+
+    idAlumnoActual = args['id_usuario']; // Adiós al ?? 2
+
     if (mensajes.isEmpty) {
       _cargarHistorial();
     }

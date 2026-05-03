@@ -65,12 +65,19 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     setState(() {
       _cargandoHistorial = true;
     });
-    // Obtenemos los argumentos pasados a esta pantalla
-    final Map? args =
+
+    final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
 
-    // Si no hay ID en los argumentos, usamos un valor por defecto o manejamos el error
-    final int userId = args?['id_usuario'] ?? 2;
+    // VALIDACIÓN ESTRICTA DE SEGURIDAD
+    if (args == null || args['id_usuario'] == null) {
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/');
+      }
+      return;
+    }
+
+    final int userId = args['id_usuario']; // Asignación limpia
 
     try {
       final response = await http.get(
@@ -86,9 +93,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
       }
     } catch (e) {
       print("Error de conexión: $e");
-      // Aquí podrías mostrar un SnackBar si la IP cambió o no hay internet
     } finally {
-      // RIGOR TÉCNICO: Pase lo que pase (éxito o error), dejamos de cargar
       if (mounted) {
         setState(() {
           _cargandoHistorial = false;
