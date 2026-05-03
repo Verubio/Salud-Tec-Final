@@ -105,6 +105,77 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
     }
   }
 
+  // 🔽 AGREGA ESTO DENTRO DE TU STATE (debajo de tus funciones actuales)
+
+  Future<void> _marcarAlertaComoAtendida(int idAlumno) async {
+    try {
+      final response = await http.put(
+        Uri.parse('${ApiConfig.baseUrl}/psicologo/alerta/$idAlumno/atender'),
+      );
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+
+        // 🔄 Recarga silenciosa del radar
+        _cargarSesionesActivas(silencioso: true);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Paciente dado de alta del radar."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception("Error del servidor");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Error al dar de alta."),
+          backgroundColor: Colors.red.shade800,
+        ),
+      );
+    }
+  }
+
+  void _mostrarConfirmacionAlta(int idAlumno, String nombreAlumno) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.green),
+            SizedBox(width: 10),
+            Text("Confirmar Alta"),
+          ],
+        ),
+        content: Text(
+          "¿Deseas marcar la alerta de $nombreAlumno como atendida?\n\n"
+          "El paciente desaparecerá del radar activo.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancelar", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _marcarAlertaComoAtendida(idAlumno);
+            },
+            child: const Text("Dar de Alta"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _abrirChatAlumno(Map<String, dynamic> sesion) {
     Navigator.pushNamed(
       context,
@@ -211,34 +282,70 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
         ),
         borderRadius: BorderRadius.circular(15),
       ),
-      child: ListTile(
-        leading: const Icon(
-          Icons.warning_rounded,
-          color: Colors.redAccent,
-          size: 30,
-        ),
-        title: Text(
-          alerta['nombre_completo'],
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: esCritico ? Colors.red[900] : Colors.orange[900],
-          ),
-        ),
-        subtitle: Text(
-          "Riesgo: ${alerta['nivel_riesgo']}\n${alerta['ultima_alerta']}",
-        ),
-        trailing: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.redAccent,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: () {
-            _abrirChatAlumno({
-              'id_alumno': alerta['id_alumno'],
-              'nombre_alumno': alerta['nombre_completo'],
-            });
-          },
-          child: const Text("Intervenir"),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(
+                Icons.warning_rounded,
+                color: Colors.redAccent,
+                size: 30,
+              ),
+              title: Text(
+                alerta['nombre_completo'],
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: esCritico ? Colors.red[900] : Colors.orange[900],
+                ),
+              ),
+              subtitle: Text(
+                "Riesgo: ${alerta['nivel_riesgo']}\n${alerta['ultima_alerta']}",
+              ),
+            ),
+
+            const SizedBox(height: 5),
+
+            // 🔴 BOTONES (Intervenir + Dar de Alta)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // 🔥 BOTÓN INTERVENIR
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    _abrirChatAlumno({
+                      'id_alumno': alerta['id_alumno'],
+                      'nombre_alumno': alerta['nombre_completo'],
+                    });
+                  },
+                  child: const Text("Intervenir"),
+                ),
+
+                const SizedBox(width: 10),
+
+                // 🟢 BOTÓN DAR DE ALTA (CON SEGURO)
+                TextButton.icon(
+                  icon: const Icon(Icons.verified_user, color: Colors.green),
+                  label: const Text(
+                    "Dar de Alta",
+                    style: TextStyle(color: Colors.green),
+                  ),
+                  onPressed: () {
+                    _mostrarConfirmacionAlta(
+                      alerta['id_alumno'],
+                      alerta['nombre_completo'],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

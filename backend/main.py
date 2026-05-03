@@ -574,16 +574,22 @@ def obtener_alertas_triage():
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # RIGOR CLÍNICO: Traemos a los alumnos que la IA marcó como Alto/Crítico en las últimas 48 horas
+        # RIGOR CLÍNICO + TÉCNICO: 
+        # - Solo alertas NO atendidas
+        # - Evitamos duplicados por usuario
+        # - Priorizamos el riesgo más alto con MAX
         query = """
-            SELECT c.id_usuario AS id_alumno, u.nombre_completo, 
-                   MAX(c.fecha_hora) as ultima_alerta, 
-                   c.nivel_riesgo
+            SELECT 
+                c.id_usuario AS id_alumno, 
+                u.nombre_completo, 
+                MAX(c.fecha_hora) AS ultima_alerta, 
+                MAX(c.nivel_riesgo) AS nivel_riesgo
             FROM ChatBotHistorial c
             JOIN Usuario u ON c.id_usuario = u.id_usuario
             WHERE c.nivel_riesgo IN ('Alto', 'Critico')
               AND c.fecha_hora >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
-            GROUP BY c.id_usuario, u.nombre_completo, c.nivel_riesgo
+              AND c.alerta_atendida = FALSE
+            GROUP BY c.id_usuario, u.nombre_completo
             ORDER BY ultima_alerta DESC
         """
         
@@ -597,9 +603,49 @@ def obtener_alertas_triage():
             a['ultima_alerta'] = a['ultima_alerta'].strftime("%Y-%m-%d %H:%M:%S")
             
         return {"status": "success", "alertas": alertas}
+    
     except Exception as e:
         print(f"DEBUG ERROR ALERTAS TRIAGE: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.put("/psicologo/alerta/{id_alumno}/atender")
+def atender_alerta_alumno(id_alumno: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+
+        # ACTUALIZACIÓN MASIVA CONTROLADA
+        query = """
+            UPDATE ChatBotHistorial 
+            SET alerta_atendida = TRUE 
+            WHERE id_usuario = %s 
+              AND nivel_riesgo IN ('Alto', 'Critico') 
+              AND alerta_atendida = FALSE
+        """
+        
+        cursor.execute(query, (id_alumno,))
+        conn.commit()
+        
+        filas_afectadas = cursor.rowcount
+
+        cursor.close()
+        conn.close()
+
+        # UX inteligente
+        if filas_afectadas == 0:
+            return {
+                "status": "warning",
+                "message": "No había alertas pendientes para este alumno"
+            }
+
+        return {
+            "status": "success",
+            "message": f"Alertas limpiadas: {filas_afectadas}"
+        }
+
+    except Exception as e:
+        print(f"DEBUG ERROR ATENDER ALERTA: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) 
     
 
 @app.get("/alumno/{id_alumno}/sesion_activa")
