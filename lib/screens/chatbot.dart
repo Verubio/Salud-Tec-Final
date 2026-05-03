@@ -12,9 +12,11 @@ class ChatBotScreen extends StatefulWidget {
 
 class _ChatBotScreenState extends State<ChatBotScreen> {
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
   List<Map<String, String>> mensajes = [];
-  bool _isTyping = false; // <-- RIGOR: Separamos la UI de los datos
-  late int idAlumnoActual; // Variable para guardar el ID
+  bool _isTyping = false;
+  late int idAlumnoActual;
 
   @override
   void didChangeDependencies() {
@@ -23,7 +25,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
 
-    // VALIDACIÓN ESTRICTA DE SEGURIDAD
     if (args == null || args['id_usuario'] == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pushReplacementNamed(context, '/');
@@ -31,38 +32,66 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
       return;
     }
 
-    idAlumnoActual = args['id_usuario']; // Adiós al ?? 2
+    idAlumnoActual = args['id_usuario'];
 
     if (mensajes.isEmpty) {
       _cargarHistorial();
     }
   }
 
+  // 🔽 SCROLL AUTOMÁTICO
+  void _scrollAlFinal() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
   Future<void> _cargarHistorial() async {
     setState(() {
       _isTyping = true;
-    }); // Mostramos que está cargando...
+    });
+
     try {
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/chatbot/historial/$idAlumnoActual'),
       );
-      final data = jsonDecode(response.body);
 
-      if (data['status'] == 'success') {
-        List<dynamic> historialDb = data['mensajes'];
-        setState(() {
-          mensajes = historialDb
-              .map<Map<String, String>>(
-                (msg) => {
-                  "role": msg['rol'] == 'user' ? 'user' : 'bot',
-                  "text": msg['mensaje'].toString(),
-                },
-              )
-              .toList();
-        });
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (data['status'] == 'success') {
+          List<dynamic> historialDb = data['mensajes'];
+
+          setState(() {
+            mensajes = historialDb
+                .map<Map<String, String>>(
+                  (msg) => {
+                    "role": msg['rol'] == 'user' ? 'user' : 'bot',
+                    "text": msg['mensaje'].toString(),
+                  },
+                )
+                .toList();
+          });
+
+          _scrollAlFinal();
+        } else {
+          throw Exception("Formato inesperado del servidor");
+        }
+      } else {
+        throw Exception("Error del servidor (${response.statusCode})");
       }
     } catch (e) {
       print("Error cargando historial: $e");
+
+      setState(() {
+        mensajes.add({"role": "bot", "text": "No pude cargar tu historial 😕"});
+      });
     } finally {
       setState(() {
         _isTyping = false;
@@ -71,7 +100,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
   }
 
   Future<void> enviarMensaje() async {
-    String texto = _controller.text;
+    String texto = _controller.text.trim(); // ✅ limpieza
     if (texto.isEmpty) return;
 
     setState(() {
@@ -80,35 +109,46 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
     });
 
     _controller.clear();
+    _scrollAlFinal();
 
     try {
       final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/chatbot'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "id_usuario": idAlumnoActual, // ✅ usamos el que ya guardaste
-          "mensaje": texto,
-        }),
+        body: jsonEncode({"id_usuario": idAlumnoActual, "mensaje": texto}),
       );
 
-      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
 
-      setState(() {
-        _isTyping = false;
-        String respuestaBot =
-            data['reply'] ??
-            "Error del servidor: ${data['detail'] ?? 'Desconocido'}";
-        mensajes.add({"role": "bot", "text": respuestaBot});
-      });
+        setState(() {
+          String respuestaBot =
+              data['reply'] ?? "El servidor respondió, pero algo salió raro 🤔";
+          mensajes.add({"role": "bot", "text": respuestaBot});
+        });
+      } else {
+        throw Exception("Error del servidor (${response.statusCode})");
+      }
     } catch (e) {
       setState(() {
-        _isTyping = false;
         mensajes.add({
           "role": "bot",
-          "text": "Uy, no pude conectarme al servidor 🔌",
+          "text": "Sin conexión. Tu mensaje no se envió 📡",
         });
       });
+    } finally {
+      setState(() {
+        _isTyping = false;
+      });
+      _scrollAlFinal();
     }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -119,6 +159,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController, // ✅ scroll conectado
               itemCount: mensajes.length,
               itemBuilder: (context, index) {
                 final msg = mensajes[index];
@@ -142,7 +183,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
             ),
           ),
 
-          // El Gatekeeper Visual
+          // INDICADOR DE "ESCRIBIENDO"
           if (_isTyping)
             Padding(
               padding: const EdgeInsets.symmetric(
@@ -171,7 +212,6 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
               ),
             ),
 
-          // ... (aquí sigue tu Padding con el Row del TextField)
           Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
@@ -187,7 +227,9 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.send),
-                  onPressed: enviarMensaje,
+                  onPressed: _isTyping
+                      ? null
+                      : enviarMensaje, // ✅ botón bloqueado
                 ),
               ],
             ),

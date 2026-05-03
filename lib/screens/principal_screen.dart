@@ -446,7 +446,14 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
             // BOTÓN DE CHATBOT (IA)
             GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/chatbot'),
+              onTap: () => Navigator.pushNamed(
+                context,
+                '/chatbot',
+                arguments: {
+                  'id_usuario':
+                      idUsuario, // O la variable de ID que tengas disponible en esa pantalla
+                },
+              ),
               child: Container(
                 padding: const EdgeInsets.all(15),
                 decoration: BoxDecoration(

@@ -194,33 +194,57 @@ class _ChatScreenState extends State<ChatScreen> {
     final texto = _controller.text.trim();
     if (texto.isEmpty || _idSesion == null) return;
 
+    // 1. RESPALDO
+    final textoRespaldo = texto;
+
+    // 2. LIMPIEZA + UI OPTIMISTA
     _controller.clear();
 
-    // UI Optimista: Añadimos el mensaje a la vista antes de que el servidor responda
     setState(() {
       _mensajes.add({
         'id_usuario_emisor': _miId,
-        'mensaje': texto,
+        'mensaje': textoRespaldo,
         'fecha_hora': 'Ahora',
       });
     });
+
     _hacerScrollAlFondo();
 
     try {
-      await http.post(
+      // 3. ENVÍO REAL AL SERVIDOR
+      final response = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/chat/enviar'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'id_sesion': _idSesion,
           'id_usuario_emisor': _miId,
-          'mensaje': texto,
+          'mensaje': textoRespaldo,
         }),
       );
-      // El timer actualizará la base de datos real
+
+      // Si el servidor falla
+      if (response.statusCode != 200) {
+        throw Exception("Error en servidor");
+      }
+
+      // ✅ Todo bien → no haces nada (tu polling lo actualizará)
     } catch (e) {
+      // 4. RECUPERACIÓN (el verdadero upgrade)
+      if (!mounted) return;
+
+      setState(() {
+        // Quitamos el mensaje optimista (porque no se envió realmente)
+        _mensajes.removeLast();
+
+        // Devolvemos el texto al input
+        _controller.text = textoRespaldo;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Error al enviar mensaje. Revisa tu red."),
+        SnackBar(
+          content: const Text("Error de conexión. Intenta de nuevo."),
+          backgroundColor: Colors.red.shade800,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
