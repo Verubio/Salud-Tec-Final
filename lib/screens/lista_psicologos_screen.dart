@@ -46,24 +46,58 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
     );
   }
 
-  void _iniciarChat(Map<String, dynamic> psicologo) {
-    // 1. Recuperamos el ID del alumno que viene de PrincipalScreen
+  Future<void> _iniciarChat(Map<String, dynamic> psicologo) async {
+    // 1. Recuperamos el ID del alumno
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
     final int idAlumno = args?['id_usuario'] ?? 2;
 
-    // 2. Mandamos AMBOS IDs al chat
-    Navigator.pushNamed(
-      context,
-      '/chat',
-      arguments: {
-        'id_alumno': idAlumno,
-        'id_psicologo': psicologo['id_usuario'],
-        'nombre_psicologo': psicologo['nombre_completo'],
-        'id_emisor_actual':
-            idAlumno, // <-- RIGOR: Le decimos que el alumno es el emisor
-      },
-    );
+    // RIGOR TÉCNICO: Antes de navegar, tocamos la puerta del servidor (El Gatekeeper)
+    try {
+      final response = await http.post(
+        Uri.parse("${ApiConfig.baseUrl}/chat/iniciar"),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id_alumno': idAlumno,
+          'id_psicologo': psicologo['id_usuario'],
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        // LUZ VERDE: El psicólogo está disponible, la sesión existe. Ahora sí, navegamos.
+        final data = jsonDecode(response.body);
+
+        Navigator.pushNamed(
+          context,
+          '/chat',
+          arguments: {
+            'id_alumno': idAlumno,
+            'id_psicologo': psicologo['id_usuario'],
+            'nombre_psicologo': psicologo['nombre_completo'],
+            'id_emisor_actual': idAlumno,
+            'id_sesion':
+                data['id_sesion'], // Pasamos el ID validado por si el ChatScreen lo necesita
+          },
+        );
+      } else if (response.statusCode == 400) {
+        // EL BLINDAJE EN ACCIÓN: El servidor nos avisa que el Doc apagó su switch hace un milisegundo
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("El profesional acaba de desconectarse."),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        // Recargamos la lista silenciosamente para que el psicólogo desaparezca frente a sus ojos
+        _obtenerPsicologos();
+      } else {
+        _mostrarError("Error del servidor al intentar conectar.");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _mostrarError("Error de red al intentar iniciar el chat.");
+    }
   }
 
   @override

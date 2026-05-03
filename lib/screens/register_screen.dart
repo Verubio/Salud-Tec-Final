@@ -15,7 +15,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   String? _carreraSeleccionada;
   bool _isLoading = false;
 
@@ -57,23 +57,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        _mostrarMensaje("¡Registro exitoso! Ya puedes iniciar sesión.", Colors.green);
+        _mostrarMensaje(
+          "¡Registro exitoso! Ya puedes iniciar sesión.",
+          Colors.green,
+        );
         Navigator.pop(context); // Regresa al Login
       } else {
         final error = jsonDecode(response.body);
-        _mostrarMensaje(error['detail'] ?? "Error al registrar.", Colors.redAccent);
+        _mostrarMensaje(
+          error['detail'] ?? "Error al registrar.",
+          Colors.redAccent,
+        );
       }
     } catch (e) {
-      _mostrarMensaje("Error de conexión. Revisa el servidor.", Colors.redAccent);
+      _mostrarMensaje(
+        "Error de conexión. Revisa el servidor.",
+        Colors.redAccent,
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _mostrarMensaje(String mensaje, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: color));
   }
 
   @override
@@ -90,9 +99,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           key: _formKey,
           child: Column(
             children: [
-              const Icon(Icons.person_add_alt_1, size: 70, color: Color(0xFF2C5F78)),
+              const Icon(
+                Icons.person_add_alt_1,
+                size: 70,
+                color: Color(0xFF2C5F78),
+              ),
               const SizedBox(height: 20),
-              
+
               // Campo: Nombre Completo
               TextFormField(
                 controller: _nameController,
@@ -101,7 +114,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   prefixIcon: Icon(Icons.person),
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) => value!.isEmpty ? "Ingresa tu nombre" : null,
+                validator: (value) =>
+                    value!.isEmpty ? "Ingresa tu nombre" : null,
               ),
               const SizedBox(height: 15),
 
@@ -125,15 +139,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               // Dropdown: Carrera
               DropdownButtonFormField<String>(
-                value: _carreraSeleccionada,
+                initialValue: _carreraSeleccionada,
                 decoration: const InputDecoration(
                   labelText: "Carrera",
                   prefixIcon: Icon(Icons.school),
                   border: OutlineInputBorder(),
                 ),
-                items: _carreras.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                items: _carreras
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
                 onChanged: (val) => setState(() => _carreraSeleccionada = val),
-                validator: (val) => val == null ? "Selecciona tu carrera" : null,
+                validator: (val) =>
+                    val == null ? "Selecciona tu carrera" : null,
               ),
               const SizedBox(height: 15),
 
@@ -146,22 +163,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   prefixIcon: Icon(Icons.lock),
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) => value!.length < 6 ? "Mínimo 6 caracteres" : null,
+                validator: (value) =>
+                    value!.length < 6 ? "Mínimo 6 caracteres" : null,
               ),
               const SizedBox(height: 30),
 
-              _isLoading 
-                ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    onPressed: _registrarUsuario,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 55),
-                      backgroundColor: const Color(0xFF2C5F78),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+              _isLoading
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                      onPressed: _registrarUsuario,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 55),
+                        backgroundColor: const Color(0xFF2C5F78),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        "Finalizar Registro",
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
-                    child: const Text("Finalizar Registro", style: TextStyle(fontSize: 16)),
-                  ),
             ],
           ),
         ),

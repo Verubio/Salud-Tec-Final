@@ -14,6 +14,7 @@ class PsicologoHomeScreen extends StatefulWidget {
 class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
   bool _estaDisponible = false;
   List<dynamic> _sesiones = [];
+  List<dynamic> _alertasTriage = [];
   bool _isLoading = true;
   late int _idPsicologo;
   String _nombrePsicologo = "Psicólogo";
@@ -22,19 +23,17 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // 1. Recuperamos los datos del Login
+
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+
     if (args != null) {
       _idPsicologo = args['id_usuario'];
       _nombrePsicologo = args['nombre'];
-
-      // RIGOR TÉCNICO: Inicializamos el switch con la verdad absoluta de la Base de Datos
       _estaDisponible = args['esta_disponible'] ?? false;
 
       _cargarSesionesActivas();
 
-      // RIGOR TÉCNICO: Polling para ver si le caen nuevos mensajes
       _timer ??= Timer.periodic(const Duration(seconds: 5), (timer) {
         if (mounted) _cargarSesionesActivas(silencioso: true);
       });
@@ -48,7 +47,6 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
   }
 
   Future<void> _cambiarDisponibilidad(bool nuevoEstado) async {
-    // UI Optimista
     setState(() => _estaDisponible = nuevoEstado);
 
     try {
@@ -65,8 +63,8 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
         throw Exception("Fallo en el servidor");
       }
     } catch (e) {
-      // Revertimos si falla
       setState(() => _estaDisponible = !nuevoEstado);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -81,15 +79,21 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
     if (!silencioso) setState(() => _isLoading = true);
 
     try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/psicologo/$_idPsicologo/sesiones'),
-      );
+      final respuestas = await Future.wait([
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/psicologo/$_idPsicologo/sesiones'),
+        ),
+        http.get(Uri.parse('${ApiConfig.baseUrl}/psicologo/alertas_triage')),
+      ]);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      if (respuestas[0].statusCode == 200 && respuestas[1].statusCode == 200) {
+        final dataSesiones = jsonDecode(respuestas[0].body);
+        final dataAlertas = jsonDecode(respuestas[1].body);
+
         if (mounted) {
           setState(() {
-            _sesiones = data['sesiones'];
+            _sesiones = dataSesiones['sesiones'];
+            _alertasTriage = dataAlertas['alertas'];
             _isLoading = false;
           });
         }
@@ -109,10 +113,7 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
         'id_alumno': sesion['id_alumno'],
         'id_psicologo': _idPsicologo,
         'nombre_psicologo': sesion['nombre_alumno'],
-        'id_emisor_actual':
-            _idPsicologo, // <-- RIGOR: Le decimos que él es el emisor
-        // Nota: El ChatScreen actual asume que siempre mostramos el nombre del psicologo en el header.
-        // Sería ideal modificar ChatScreen después para que si soy psicólogo, muestre el nombre del alumno.
+        'id_emisor_actual': _idPsicologo,
       },
     );
   }
@@ -135,56 +136,136 @@ class _PsicologoHomeScreenState extends State<PsicologoHomeScreen> {
               Switch(
                 value: _estaDisponible,
                 onChanged: _cambiarDisponibilidad,
-                activeColor: Colors.greenAccent,
+                activeThumbColor: Colors.greenAccent,
                 inactiveThumbColor: Colors.grey,
               ),
             ],
           ),
         ],
       ),
+
+      // 🔥 NUEVO BODY CON RADAR + SESIONES
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _sesiones.isEmpty
-          ? const Center(
-              child: Text(
-                "Bandeja de entrada vacía",
-                style: TextStyle(color: Colors.grey),
+          : RefreshIndicator(
+              onRefresh: () => _cargarSesionesActivas(silencioso: false),
+              child: ListView(
+                padding: const EdgeInsets.all(15),
+                children: [
+                  /// 🚨 ALERTAS
+                  if (_alertasTriage.isNotEmpty) ...[
+                    const Text(
+                      "⚠️ Requieren Intervención",
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ..._alertasTriage.map((alerta) => _buildAlertaCard(alerta)),
+                    const Divider(height: 30, thickness: 2),
+                  ],
+
+                  /// 💬 SESIONES
+                  const Text(
+                    "💬 Sesiones Activas",
+                    style: TextStyle(
+                      color: Color(0xFF2C5F78),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  if (_sesiones.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Center(
+                        child: Text(
+                          "No hay chats activos",
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._sesiones.map((sesion) => _buildSesionCard(sesion)),
+                ],
               ),
-            )
-          : _buildListaSesiones(),
+            ),
     );
   }
 
-  Widget _buildListaSesiones() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(15),
-      itemCount: _sesiones.length,
-      itemBuilder: (context, index) {
-        final s = _sesiones[index];
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+  /// 🚨 TARJETA DE ALERTA
+  Widget _buildAlertaCard(Map<String, dynamic> alerta) {
+    bool esCritico = alerta['nivel_riesgo'] == 'Critico';
+
+    return Card(
+      elevation: 3,
+      color: esCritico ? const Color(0xFFFFEBEB) : const Color(0xFFFFF4E5),
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(
+          color: esCritico ? Colors.red : Colors.orange,
+          width: 1.5,
+        ),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: ListTile(
+        leading: const Icon(
+          Icons.warning_rounded,
+          color: Colors.redAccent,
+          size: 30,
+        ),
+        title: Text(
+          alerta['nombre_completo'],
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: esCritico ? Colors.red[900] : Colors.orange[900],
           ),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF5ED3C6),
-              child: Text(
-                s['nombre_alumno'][0],
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
-            title: Text(
-              s['nombre_alumno'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text("Sesión iniciada: ${s['fecha_inicio']}"),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () => _abrirChatAlumno(s),
+        ),
+        subtitle: Text(
+          "Riesgo: ${alerta['nivel_riesgo']}\n${alerta['ultima_alerta']}",
+        ),
+        trailing: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.redAccent,
+            foregroundColor: Colors.white,
           ),
-        );
-      },
+          onPressed: () {
+            _abrirChatAlumno({
+              'id_alumno': alerta['id_alumno'],
+              'nombre_alumno': alerta['nombre_completo'],
+            });
+          },
+          child: const Text("Intervenir"),
+        ),
+      ),
+    );
+  }
+
+  /// 💬 TARJETA DE SESIÓN NORMAL
+  Widget _buildSesionCard(Map<String, dynamic> s) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF5ED3C6),
+          child: Text(
+            s['nombre_alumno'][0],
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+        title: Text(
+          s['nombre_alumno'],
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text("Iniciada: ${s['fecha_inicio']}"),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () => _abrirChatAlumno(s),
+      ),
     );
   }
 }

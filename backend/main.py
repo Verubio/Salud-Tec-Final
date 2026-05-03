@@ -3,14 +3,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import mysql.connector
 from datetime import datetime
+from dotenv import load_dotenv
 import os
 from google import genai  # <--- Fíjate que el import también cambió un poquito
+import re
+import json
+
 
 app = FastAPI()
 
 # --- CONFIGURACIÓN DE GEMINI ---
-# Aquí inicializamos el cliente con tu llave directamente para asegurar la prueba
-client = genai.Client(api_key="AIzaSyA1nlKWL9dUgcvI1vBWHmkzr3sstB-rJZM")
+# Carga las variables del archivo .env a la memoria
+load_dotenv() 
+
+# Extrae la llave de la memoria de forma segura
+api_key = os.getenv("GEMINI_API_KEY")
+
+# Inicia el cliente sin quemar la llave en el código
+client = genai.Client(api_key=api_key)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,7 +38,7 @@ app.add_middleware(
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': 'PeyPerritu1*', 
+    'password': 'Luis2911', 
     'database': 'nexus4_db'
 }
 
@@ -164,53 +174,56 @@ def obtener_historial(id_usuario: int):
 
 
 
-# --- LÓGICA DEL NEXUSBOT ---
-
+# 🧠 PROMPT OPTIMIZADO
 SYSTEM_PROMPT = """
 Eres NexusBot, un asistente emocional para estudiantes universitarios.
 
-Tu objetivo:
-- Brindar apoyo emocional breve, claro y empático.
-- Ayudar con estrés académico, ansiedad leve y motivación.
+Tu función es actuar como un sistema de TRIAGE emocional automatizado.
 
-Reglas estrictas:
-- NO des diagnósticos médicos o psicológicos.
-- NO des instrucciones clínicas.
-- NO sugieras medicamentos.
-- NO reemplazas a un profesional.
+--- MEMORIA Y CONTEXTO ---
+Se te proporcionará un "HISTORIAL RECIENTE". Debes usar esta información para recordar
+detalles del usuario (nombres, mascotas, situaciones pasadas) y mantener una conversación fluida 
+y coherente. Si el usuario hace referencia a algo que te dijo antes, usa el historial para 
+responderle de forma natural, sin decir "como soy una IA no tengo acceso".
 
-Estilo:
-- Responde en máximo 2-3 líneas.
-- Usa lenguaje cálido, cercano y sencillo.
-- Sé empático, como un amigo que escucha.
+--- REGLAS DE CONTEXTO Y MEMORIA (ESTRICTO) ---
+- Revisa siempre el "HISTORIAL RECIENTE". Si el usuario te pregunta por algo que él mismo mencionó en ese historial (nombres, mascotas, exámenes, tareas, objetos), ESTÁS OBLIGADO a responder usando esa información.
+- ESTÁ ESTRICTAMENTE PROHIBIDO usar excusas evasivas como "no tengo acceso a tus tareas", "no puedo recordar detalles" o "como asistente emocional no sé eso".
+- Si la información está en el historial, actúa como un amigo con buena memoria y respóndele de forma natural.
+- (Nota: Si te pregunta por algo que de verdad NO está en el historial reciente, dile amablemente que lo olvidaste o que te lo recuerde).
 
-Contexto:
-El usuario presenta: {contexto}
+--- FORMATO DE RESPUESTA OBLIGATORIO ---
+Debes responder ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin Markdown.
 
-Instrucciones:
-- Da un consejo práctico y sencillo.
-- Puedes sugerir respiración, pausas, organización o hablar con alguien.
-- No repitas exactamente la misma respuesta siempre.
+Estructura EXACTA:
+{
+  "nivel_riesgo": "Bajo | Medio | Alto | Critico",
+  "indicadores_detectados": ["lista corta de indicadores"],
+  "respuesta": "mensaje empático breve (máximo 3 líneas)"
+}
+
+--- REGLAS CRÍTICAS ---
+- NO incluyas texto fuera del JSON
+- NO inventes diagnósticos clínicos
+- NO uses lenguaje médico complejo
+- Máximo 3 indicadores
+
+--- CRITERIOS DE CLASIFICACIÓN ---
+Bajo: Estrés académico normal
+Medio: Ansiedad leve, tristeza
+Alto: Desesperanza, vacío, pérdida de sentido
+Critico: Intención directa de autolesión
+
+--- RESPUESTA ---
+- Sé cálido y humano
+- Si es Alto o Critico, sugiere buscar ayuda real
 """
 
-PALABRAS_CRISIS = [
-    "no puedo más", "quiero morir", "suicidio", "ya no quiero vivir", 
-    "terminar con todo", "me quiero matar", "crisis"
-]
-
-def detectar_crisis(mensaje: str) -> bool:
-    mensaje = mensaje.lower()
-    return any(p in mensaje for p in PALABRAS_CRISIS)
-
-def detectar_contexto(mensaje: str) -> str:
-    mensaje = mensaje.lower()
-    if any(p in mensaje for p in ["examen", "tarea", "proyecto", "escuela", "compilador", "semestre"]):
-        return "estrés académico"
-    if any(p in mensaje for p in ["ansiedad", "nervioso", "preocupado"]):
-        return "ansiedad leve"
-    if any(p in mensaje for p in ["triste", "desanimado", "solo"]):
-        return "tristeza"
-    return "apoyo emocional general"
+# 🛡️ REGEX MEJORADO
+PATRON_CRISIS = re.compile(
+    r'\b(suicid.*|matarm.*|morirm.*|ya no.*vivir|terminar.*todo)\b',
+    re.IGNORECASE
+)
 
 class ChatRequest(BaseModel):
     id_usuario: int
@@ -219,32 +232,97 @@ class ChatRequest(BaseModel):
 @app.post("/chatbot")
 async def chatbot(request: ChatRequest):
     try:
-        mensaje = request.mensaje
-
-        # 🚨 FILTRO 1: CRISIS (Se responde sin gastar tokens de la IA)
-        if detectar_crisis(mensaje):
-            return {
-                "reply": "Lo que estás sintiendo es importante 💙 No estás solo/a. Te recomiendo hablar con un profesional o alguien de confianza lo antes posible. Si puedes, busca apoyo ahora mismo."
-            }
-
-        # 🧠 FILTRO 2: CONTEXTO
-        contexto = detectar_contexto(mensaje)
-
-  # 🤖 FILTRO 3: GEMINI
-        prompt_final = SYSTEM_PROMPT.format(contexto=contexto) + f"\nUsuario: {mensaje}"
+        mensaje = request.mensaje.strip()
+        id_user = request.id_usuario
         
-       
-        response = client.models.generate_content(
-            model='gemini-2.5-flash', 
-            contents=prompt_final
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. RECUPERAR HISTORIAL (Fijo y estable)
+        cursor.execute("""
+            SELECT rol, mensaje 
+            FROM ChatBotHistorial 
+            WHERE id_usuario = %s 
+            ORDER BY id_mensaje DESC LIMIT 20
+        """, (id_user,))
+        
+        historial_raw = cursor.fetchall()
+        historial_raw.reverse()
+
+        # 2. FORMATEO SEGURO (A prueba de comillas)
+        texto_historial = ""
+        if historial_raw:
+            texto_historial = "\n--- HISTORIAL RECIENTE ---\n"
+            for h in historial_raw:
+                actor = "Usuario" if h['rol'] == 'user' else "NexusBot"
+                texto_historial += f"{actor}: {h['mensaje']}\n"
+            texto_historial += "--------------------------\n"
+
+        respuesta_bot = ""
+        nivel_riesgo = "Bajo"
+        origen = ""
+
+        # 🚨 FILTRO 1: REGEX
+        if PATRON_CRISIS.search(mensaje):
+            respuesta_bot = "Lo que estás sintiendo es muy importante. No estás solo. Por favor, busca apoyo profesional o habla con alguien de confianza ahora mismo."
+            nivel_riesgo = "Critico"
+            origen = "RegEx"
+        else:
+            # 🧠 FILTRO 2: IA CON MEMORIA
+            prompt_final = SYSTEM_PROMPT + f"{texto_historial}\nMensaje actual del usuario:\n\"{mensaje}\""
+
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt_final,
+                config={"response_mime_type": "application/json"}
+            )
+
+            texto = response.text.strip()
+            if texto.startswith("```"):
+                texto = texto.replace("```json", "").replace("```", "").strip()
+
+            datos_ia = json.loads(texto)
+
+            nivel_riesgo = datos_ia.get("nivel_riesgo", "Bajo")
+            respuesta_bot = datos_ia.get("respuesta", "Aquí estoy para escucharte.")
+            origen = "IA"
+
+            if nivel_riesgo not in ["Bajo", "Medio", "Alto", "Critico"]:
+                nivel_riesgo = "Medio"
+
+            # 🚨 LOG DE ALERTA
+            if nivel_riesgo in ["Alto", "Critico"]:
+                indicadores = datos_ia.get("indicadores_detectados", [])
+                print(f"!!! ALERTA ROJA !!! Usuario: {id_user} | Riesgo: {nivel_riesgo} | Indicadores: {indicadores}")
+
+        # 3. GUARDAR EN BD (Tu brillante aportación validada)
+        cursor.execute(
+            "INSERT INTO ChatBotHistorial (id_usuario, rol, mensaje, nivel_riesgo) VALUES (%s, 'user', %s, %s)",
+            (id_user, mensaje, nivel_riesgo)
         )
 
-        return {"reply": response.text}
-    
+        cursor.execute(
+            "INSERT INTO ChatBotHistorial (id_usuario, rol, mensaje, nivel_riesgo) VALUES (%s, 'bot', %s, %s)",
+            (id_user, respuesta_bot, nivel_riesgo)
+        )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return {
+            "reply": respuesta_bot,
+            "riesgo_detectado": nivel_riesgo,
+            "origen": origen
+        }
+
+    except json.JSONDecodeError as e:
+        print(f"❌ ERROR JSON IA: {e}")
+        return {"reply": "Estoy aquí para escucharte. ¿Quieres intentar decirlo de otra forma?"}
+
     except Exception as e:
+        print(f"🔥 ERROR DEL BOT: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        print(f"🔥 ERROR DEL BOT: {e}") # <--- Agrega esta línea
 
 @app.get("/psicologos_disponibles")
 def obtener_psicologos():
@@ -442,3 +520,102 @@ def sincronizar_chat(id_sesion: int):
     except Exception as e:
 
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/chatbot/historial/{id_usuario}")
+def obtener_historial_chatbot(id_usuario: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # Traemos los últimos 50 mensajes de la BD ordenados del más viejo al más nuevo
+        cursor.execute("""
+            SELECT rol, mensaje 
+            FROM ChatBotHistorial 
+            WHERE id_usuario = %s 
+            ORDER BY id_mensaje ASC LIMIT 50
+        """, (id_usuario,))
+        
+        historial = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        return {"status": "success", "mensajes": historial}
+    except Exception as e:
+        print(f"DEBUG ERROR GET HISTORIAL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))    
+    
+@app.get("/psicologo/alertas_triage")
+def obtener_alertas_triage():
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # RIGOR CLÍNICO: Traemos a los alumnos que la IA marcó como Alto/Crítico en las últimas 48 horas
+        query = """
+            SELECT c.id_usuario AS id_alumno, u.nombre_completo, 
+                   MAX(c.fecha_hora) as ultima_alerta, 
+                   c.nivel_riesgo
+            FROM ChatBotHistorial c
+            JOIN Usuario u ON c.id_usuario = u.id_usuario
+            WHERE c.nivel_riesgo IN ('Alto', 'Critico')
+              AND c.fecha_hora >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+            GROUP BY c.id_usuario, u.nombre_completo, c.nivel_riesgo
+            ORDER BY ultima_alerta DESC
+        """
+        
+        cursor.execute(query)
+        alertas = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        for a in alertas:
+            a['ultima_alerta'] = a['ultima_alerta'].strftime("%Y-%m-%d %H:%M:%S")
+            
+        return {"status": "success", "alertas": alertas}
+    except Exception as e:
+        print(f"DEBUG ERROR ALERTAS TRIAGE: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/alumno/{id_alumno}/sesion_activa")
+def verificar_sesion_activa_alumno(id_alumno: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        # 1. Buscamos si el alumno tiene un chat vivo con algún psicólogo
+        cursor.execute("""
+            SELECT id_sesion, id_psicologo, fecha_inicio 
+            FROM SesionChat 
+            WHERE id_alumno = %s AND esta_activa = TRUE 
+            LIMIT 1
+        """, (id_alumno,))
+        sesion = cursor.fetchone()
+
+        # Si no hay sesión, devolvemos null pacíficamente
+        if not sesion:
+            cursor.close()
+            conn.close()
+            return {"status": "success", "sesion_activa": None, "total_mensajes": 0}
+
+        # 2. Si hay sesión, contamos los mensajes. Esto es el motor de tu punto rojo.
+        cursor.execute("SELECT COUNT(*) AS total FROM Chat WHERE id_sesion = %s", (sesion['id_sesion'],))
+        resultado_conteo = cursor.fetchone()
+        total_mensajes = resultado_conteo['total'] if resultado_conteo else 0
+
+        if sesion['fecha_inicio']:
+            sesion['fecha_inicio'] = sesion['fecha_inicio'].strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "status": "success",
+            "sesion_activa": sesion,
+            "total_mensajes": total_mensajes
+        }
+
+    except Exception as e:
+        print(f"DEBUG ERROR SESION ACTIVA ALUMNO: {e}")
+        raise HTTPException(status_code=500, detail=str(e))    

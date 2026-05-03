@@ -13,6 +13,54 @@ class ChatBotScreen extends StatefulWidget {
 class _ChatBotScreenState extends State<ChatBotScreen> {
   final TextEditingController _controller = TextEditingController();
   List<Map<String, String>> mensajes = [];
+  bool _isTyping = false; // <-- RIGOR: Separamos la UI de los datos
+  late int idAlumnoActual; // Variable para guardar el ID
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Extraemos el ID aquí de forma segura cuando la pantalla se construye
+    final args =
+        ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+    idAlumnoActual = args?['id_usuario'] ?? 2;
+
+    // Si la lista está vacía, vamos por el historial al servidor
+    if (mensajes.isEmpty) {
+      _cargarHistorial();
+    }
+  }
+
+  Future<void> _cargarHistorial() async {
+    setState(() {
+      _isTyping = true;
+    }); // Mostramos que está cargando...
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/chatbot/historial/$idAlumnoActual'),
+      );
+      final data = jsonDecode(response.body);
+
+      if (data['status'] == 'success') {
+        List<dynamic> historialDb = data['mensajes'];
+        setState(() {
+          mensajes = historialDb
+              .map<Map<String, String>>(
+                (msg) => {
+                  "role": msg['rol'] == 'user' ? 'user' : 'bot',
+                  "text": msg['mensaje'].toString(),
+                },
+              )
+              .toList();
+        });
+      }
+    } catch (e) {
+      print("Error cargando historial: $e");
+    } finally {
+      setState(() {
+        _isTyping = false;
+      });
+    }
+  }
 
   Future<void> enviarMensaje() async {
     String texto = _controller.text;
@@ -20,6 +68,7 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
 
     setState(() {
       mensajes.add({"role": "user", "text": texto});
+      _isTyping = true;
     });
 
     _controller.clear();
@@ -29,22 +78,27 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
         Uri.parse('${ApiConfig.baseUrl}/chatbot'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          "id_usuario": 1,
-          "mensaje": texto
+          "id_usuario": idAlumnoActual, // ✅ usamos el que ya guardaste
+          "mensaje": texto,
         }),
       );
 
       final data = jsonDecode(response.body);
 
       setState(() {
-        // Si todo sale bien, toma el 'reply'. Si el backend mandó un error (ej. 500), toma el 'detail'
-        String respuestaBot = data['reply'] ?? "Error del servidor: ${data['detail'] ?? 'Desconocido'}";
+        _isTyping = false;
+        String respuestaBot =
+            data['reply'] ??
+            "Error del servidor: ${data['detail'] ?? 'Desconocido'}";
         mensajes.add({"role": "bot", "text": respuestaBot});
       });
     } catch (e) {
-      // Por si se cae el internet o el servidor de Python está apagado
       setState(() {
-        mensajes.add({"role": "bot", "text": "Uy, no pude conectarme al servidor 🔌"});
+        _isTyping = false;
+        mensajes.add({
+          "role": "bot",
+          "text": "Uy, no pude conectarme al servidor 🔌",
+        });
       });
     }
   }
@@ -79,6 +133,37 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
               },
             ),
           ),
+
+          // El Gatekeeper Visual
+          if (_isTyping)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      "NexusBot está pensando...",
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // ... (aquí sigue tu Padding con el Row del TextField)
           Padding(
             padding: const EdgeInsets.all(8),
             child: Row(
@@ -95,10 +180,10 @@ class _ChatBotScreenState extends State<ChatBotScreen> {
                 IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: enviarMensaje,
-                )
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );

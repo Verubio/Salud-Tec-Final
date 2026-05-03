@@ -5,9 +5,9 @@ import 'package:salud_tec_final/screens/register_screen.dart';
 import 'screens/biblio_recu.dart';
 import 'screens/chat_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/principal_screen.dart';
 import 'screens/registro_emo.dart';
 import 'package:salud_tec_final/screens/chatbot.dart';
+import 'package:salud_tec_final/screens/alumno_main_container.dart';
 
 void main() {
   runApp(const MyApp());
@@ -47,7 +47,16 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const LoginScreen(),
-        '/home': (context) => const PrincipalScreen(),
+        '/home': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+
+          return AlumnoMainContainer(
+            idAlumno: args['id_usuario'],
+            // luego pasaremos también nombre si quieres
+          );
+        },
         '/biblioteca': (context) => const BiblioRecu(),
         '/chat': (context) => const ChatScreen(),
         '/registro': (context) => const RegistroEmo(),
