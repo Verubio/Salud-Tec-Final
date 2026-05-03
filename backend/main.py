@@ -8,7 +8,19 @@ import os
 from google import genai  # <--- Fíjate que el import también cambió un poquito
 import re
 import json
+from passlib.context import CryptContext
 
+
+# Configuración del encriptador (Bcrypt)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Función para encriptar
+def obtener_hash_password(password: str):
+    return pwd_context.hash(password)
+
+# Función para verificar
+def verificar_password(plain_password: str, hashed_password: str):
+    return pwd_context.verify(plain_password, hashed_password)
 
 app = FastAPI()
 
@@ -86,18 +98,28 @@ def login(request: LoginRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # RIGOR DE SEGURIDAD (7.2): Validamos correo Y contraseña
-        query = "SELECT id_usuario, nombre_completo, rol, esta_disponible FROM Usuario WHERE correo_institucional = %s AND password_hash = %s"
-        cursor.execute(query, (request.correo, request.password))
+        # 1. Buscamos SOLO por correo
+        query = "SELECT id_usuario, nombre_completo, rol, esta_disponible, password_hash FROM Usuario WHERE correo_institucional = %s"
+        cursor.execute(query, (request.correo,))
         user = cursor.fetchone()
         
         cursor.close()
         conn.close()
         
-        if user:
-            return {"status": "success", "user": {"id_usuario": user['id_usuario'], "nombre_completo": user['nombre_completo'], "rol": user['rol'], "esta_disponible": user['esta_disponible']}}
-        else:
+        # 2. Verificamos que el usuario exista y que la contraseña coincida con el hash
+        if not user or not verificar_password(request.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+            
+        # Si sobrevive la validación, le damos acceso (no devuelvas el hash al celular)
+        return {
+            "status": "success", 
+            "user": {
+                "id_usuario": user['id_usuario'], 
+                "nombre_completo": user['nombre_completo'], 
+                "rol": user['rol'], 
+                "esta_disponible": user['esta_disponible']
+            }
+        }
             
     except Exception as e:
         print(f"DEBUG ERROR LOGIN: {e}") # Esto imprimirá el error real en tu consola
@@ -109,12 +131,14 @@ def register(user: UserRegister):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # Eliminamos la coma extra y mantenemos tu orden preferido
+        # RIGOR DE SEGURIDAD: Encriptamos la contraseña antes de tocar la BD
+        password_encriptada = obtener_hash_password(user.password)
+        
         query = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera) 
                    VALUES (%s, %s, %s, 'Alumno', %s)"""
         
-        # IMPORTANTE: El orden aquí debe ser el mismo que en los paréntesis de arriba
-        valores = (user.nombre_completo, user.correo, user.password, user.carrera)
+        # Reemplazamos user.password por la variable encriptada
+        valores = (user.nombre_completo, user.correo, password_encriptada, user.carrera)
         
         cursor.execute(query, valores)
         conn.commit()

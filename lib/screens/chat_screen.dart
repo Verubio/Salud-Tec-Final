@@ -170,7 +170,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Navigator.pop(context); // Lo sacamos de la pantalla
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("La sesión ha sido finalizada por el profesional."),
+              content: Text("La sesión ha concluido."),
               backgroundColor: Colors.orange,
             ),
           );
