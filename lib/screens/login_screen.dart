@@ -12,7 +12,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController(); // <-- NUEVO: Controlador para contraseña
+  final _passwordController =
+      TextEditingController(); // <-- NUEVO: Controlador para contraseña
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
@@ -29,31 +30,56 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    // Cambio: Usamos la variable centralizada
     final url = Uri.parse('${ApiConfig.baseUrl}/login');
 
     try {
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        // <-- NUEVO: Enviamos el correo Y la contraseña al backend
         body: jsonEncode({
           'correo': _emailController.text.trim(),
-          'password': _passwordController.text.trim(), 
+          'password': _passwordController.text.trim(),
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
         final String nombreUsuario = data['user']['nombre_completo'];
+        final int idUsuario = data['user']['id_usuario'];
+        final String rolUsuario =
+            data['user']['rol']; // <-- RIGOR: Capturamos el rol
 
         if (!mounted) return;
-        Navigator.pushReplacementNamed(context, '/home', arguments: nombreUsuario);
+
+        // BIFURCACIÓN LÓGICA BASADA EN ROLES (RBAC)
+        if (rolUsuario == 'Psicologo') {
+          Navigator.pushReplacementNamed(
+            context,
+            '/psicologo_home', // <-- Ruta hacia la estación de mando del psicólogo
+            arguments: {
+              'nombre': nombreUsuario,
+              'id_usuario': idUsuario,
+              'esta_disponible':
+                  data['user']['esta_disponible'] == 1 ||
+                  data['user']['esta_disponible'] == true,
+            },
+          );
+        } else {
+          // Asumimos 'Alumno' por defecto (o Administrador si lo configuras luego)
+          Navigator.pushReplacementNamed(
+            context,
+            '/home',
+            arguments: {'nombre': nombreUsuario, 'id_usuario': idUsuario},
+          );
+        }
       } else {
         _mostrarError("Credenciales incorrectas o usuario no encontrado.");
       }
     } catch (e) {
-      _mostrarError("No se pudo conectar con el servidor. Revisa que FastAPI esté corriendo.");
+      _mostrarError(
+        "No se pudo conectar con el servidor. Revisa que FastAPI esté corriendo.",
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -68,22 +94,28 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center( // Agregué un Center para que no se pegue arriba si el teclado se oculta
-        child: SingleChildScrollView( // <-- NUEVO: Permite hacer scroll si el teclado tapa los campos
+      body: Center(
+        // Agregué un Center para que no se pegue arriba si el teclado se oculta
+        child: SingleChildScrollView(
+          // <-- NUEVO: Permite hacer scroll si el teclado tapa los campos
           padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.self_improvement, size: 80, color: Color(0xFF2C5F78)),
+                const Icon(
+                  Icons.self_improvement,
+                  size: 80,
+                  color: Color(0xFF2C5F78),
+                ),
                 const SizedBox(height: 20),
                 Text(
-                  "Bienvenido a Salud-Tec", 
+                  "Bienvenido a Salud-Tec",
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     color: const Color(0xFF2C5F78),
-                    fontWeight: FontWeight.bold
-                  )
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 40),
                 TextFormField(
@@ -93,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: "Correo Institucional",
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.email),
-                    hintText: "ejemplo@slp.tecnm.mx"
+                    hintText: "ejemplo@slp.tecnm.mx",
                   ),
                   validator: (value) {
                     if (value == null || !value.endsWith('@slp.tecnm.mx')) {
@@ -120,36 +152,38 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 30),
-                _isLoading 
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton(
-                      onPressed: _conectarConServidor,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 50),
-                        backgroundColor: const Color(0xFF2C5F78),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                _isLoading
+                    ? const CircularProgressIndicator()
+                    : ElevatedButton(
+                        onPressed: _conectarConServidor,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 50),
+                          backgroundColor: const Color(0xFF2C5F78),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          "Ingresar",
+                          style: TextStyle(fontSize: 18),
+                        ),
                       ),
-                      child: const Text("Ingresar", style: TextStyle(fontSize: 18)),
-                    ),
                 const SizedBox(height: 15),
                 // <-- NUEVO: Botón para ir a registrarse
-               TextButton(
-  onPressed: () {
-    // Muestra un mensaje emergente en lugar de cambiar de pantalla
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("La pantalla de registro estará disponible pronto."),
-        backgroundColor: Colors.blueGrey,
-        duration: Duration(seconds: 2),
-      ),
-    );
-  },
-  child: const Text(
-    "¿No tienes cuenta? Regístrate aquí",
-    style: TextStyle(color: Color(0xFF2C5F78)),
-  ),
-)
+                TextButton(
+                  onPressed: () {
+                    // Esto buscará la ruta que definiremos en main.dart
+                    Navigator.pushNamed(context, '/registro_usuario');
+                  },
+                  child: const Text(
+                    "¿No tienes cuenta? Regístrate aquí",
+                    style: TextStyle(
+                      color: Color(0xFF2C5F78),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
