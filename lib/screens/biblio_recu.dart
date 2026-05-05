@@ -11,7 +11,7 @@ class BiblioRecu extends StatelessWidget {
       {
         'titulo': 'Respiración',
         'icono': Icons.air,
-        'color': const Color(0xFFB5EAD7),
+        'color': const Color.fromARGB(255, 236, 150, 229),
         'descripcion': 'Ejercicios prácticos para el control fisiológico del estrés.',
         'secciones': <Map<String, String>>[
           {

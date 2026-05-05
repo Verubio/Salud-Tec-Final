@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:salud_tec_final/screens/lista_psicologos_screen.dart';
+import 'package:salud_tec_final/screens/psicologo_home_screen.dart';
+import 'package:salud_tec_final/screens/register_screen.dart';
 import 'screens/biblio_recu.dart';
 import 'screens/chat_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/principal_screen.dart';
 import 'screens/registro_emo.dart';
-import 'package:salud_tec_final/screens/biblio_recu.dart';
+import 'package:salud_tec_final/screens/chatbot.dart';
+import 'package:salud_tec_final/screens/alumno_main_container.dart';
 
 void main() {
   runApp(const MyApp());
@@ -22,25 +25,45 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         // Aplicando la paleta "Serenidad y Confianza"
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2C5F78),
-          primary: const Color(0xFF2C5F78),
+          seedColor: const Color.fromARGB(255, 221, 115, 203),
+          primary: const Color.fromARGB(255, 128, 200, 236),
           secondary: const Color(0xFF84A98C),
           surface: const Color(0xFFF8F9FA),
         ),
         // Configurando tipografías (Asegúrate de agregarlas a pubspec.yaml)
         fontFamily: 'Inter',
         textTheme: const TextTheme(
-          displayLarge: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.bold, color: Color(0xFF2C5F78)),
-          titleLarge: TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+          displayLarge: TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C5F78),
+          ),
+          titleLarge: TextStyle(
+            fontFamily: 'Montserrat',
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       initialRoute: '/',
       routes: {
         '/': (context) => const LoginScreen(),
-        '/home': (context) => const PrincipalScreen(),
+        '/home': (context) {
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
+
+          return AlumnoMainContainer(
+            idAlumno: args['id_usuario'],
+            // luego pasaremos también nombre si quieres
+          );
+        },
         '/biblioteca': (context) => const BiblioRecu(),
         '/chat': (context) => const ChatScreen(),
         '/registro': (context) => const RegistroEmo(),
+        '/chatbot': (context) => const ChatBotScreen(),
+        '/registro_usuario': (context) => const RegisterScreen(),
+        '/seleccion_psicologo': (context) => const ListaPsicologosScreen(),
+        '/psicologo_home': (context) => const PsicologoHomeScreen(),
       },
     );
   }
