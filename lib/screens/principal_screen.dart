@@ -17,6 +17,24 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   String _mensajeActual = "Me da mucha paz verte así, en calma";
   String _gifPrincipal = 'assets/carita_estable.gif';
   Color _colorFondo = Colors.blue.withOpacity(0.1);
+  String _nivelEstres = "Bajo";
+  double _puntajeEstres = 0;
+
+  Color _obtenerColorSegunNivel(String nivel) {
+    switch (nivel) {
+      case "Moderado":
+        return Colors.orange;
+
+      case "Alto":
+        return Colors.red;
+
+      case "Critico":
+        return const Color(0xFF8B0000);
+
+      default:
+        return Colors.green;
+    }
+  }
 
   final List<Map<String, String>> _opcionesEmociones = [
     {
@@ -57,6 +75,13 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
     // didChangeDependencies se ejecuta varias veces, por eso usamos el flag
     if (!_peticionRealizada) {
       _obtenerHistorial();
+
+      final args =
+          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
+
+      if (args != null && args['id_usuario'] != null) {
+        _obtenerEstadoRapido(args['id_usuario']);
+      }
       _peticionRealizada = true;
     }
   }
@@ -99,6 +124,27 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
           _cargandoHistorial = false;
         });
       }
+    }
+  }
+
+  Future<void> _obtenerEstadoRapido(int idUsuario) async {
+    try {
+      final response = await http.get(
+        Uri.parse("${ApiConfig.baseUrl}/alumno/$idUsuario/prediccion_estres"),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        if (mounted) {
+          setState(() {
+            _nivelEstres = data['nivel'];
+            _puntajeEstres = (data['puntaje'] as num).toDouble();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error obteniendo estrés: $e");
     }
   }
 
@@ -314,6 +360,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
                 ),
               ],
             ),
+
             const SizedBox(height: 10),
 
             GestureDetector(
@@ -344,36 +391,133 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
             ),
             const SizedBox(height: 30),
 
-            // CARD ESTRÉS
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.analytics, color: Color(0xFF2C5F78), size: 40),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Predicción de Estrés",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          "Nivel: MEDIO",
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+            // CARD ESTRÉS (NAVEGABLE)
+            GestureDetector(
+              onTap: () async {
+                await Navigator.pushNamed(
+                  context,
+                  '/dashboard_estres',
+                  arguments: {'id_usuario': idUsuario},
+                );
+
+                // RECARGA AUTOMÁTICA AL VOLVER
+                _obtenerEstadoRapido(idUsuario);
+              },
+
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 600),
+
+                padding: const EdgeInsets.all(22),
+
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(28),
+
+                  gradient: LinearGradient(
+                    colors: [
+                      _obtenerColorSegunNivel(_nivelEstres),
+                      _obtenerColorSegunNivel(_nivelEstres).withOpacity(0.75),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ],
+
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.25),
+                    width: 1.5,
+                  ),
+
+                  boxShadow: [
+                    BoxShadow(
+                      color: _obtenerColorSegunNivel(
+                        _nivelEstres,
+                      ).withOpacity(0.45),
+
+                      blurRadius: 22,
+                      spreadRadius: 3,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+
+                child: Row(
+                  children: [
+                    // MINI HALO
+                    Container(
+                      width: 58,
+                      height: 58,
+
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+
+                        color: Colors.white.withOpacity(0.15),
+
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.2),
+                            blurRadius: 12,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+
+                      child: const Icon(
+                        Icons.psychology_alt,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                    ),
+
+                    const SizedBox(width: 18),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+
+                        children: [
+                          const Text(
+                            "Predicción de Estrés",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+
+                          const SizedBox(height: 4),
+
+                          Text(
+                            _nivelEstres.toUpperCase(),
+
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+
+                          const SizedBox(height: 6),
+
+                          Text(
+                            "Tensión estimada: "
+                            "${_puntajeEstres.toStringAsFixed(1)}",
+
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -663,6 +807,20 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
             const SizedBox(height: 20),
           ],
         ),
+      ),
+
+      // BOTÓN FLOTANTE NUEVA TAREA
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF2C5F78),
+        onPressed: () {
+          Navigator.pushNamed(
+            context,
+            '/nueva_tarea',
+            arguments: {'id_usuario': idUsuario},
+          );
+        },
+        icon: const Icon(Icons.add_task, color: Colors.white),
+        label: const Text("Nueva tarea", style: TextStyle(color: Colors.white)),
       ),
     );
   }

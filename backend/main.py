@@ -9,6 +9,12 @@ from google import genai  # <--- Fíjate que el import también cambió un poqui
 import re
 import json
 from passlib.context import CryptContext
+from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Optional, Literal
+from datetime import datetime
+from fastapi import HTTPException
+import mysql.connector
 
 
 # Configuración del encriptador (Bcrypt)
@@ -90,6 +96,33 @@ class EstadoDisponibilidadRequest(BaseModel):
 class FinalizarSesionRequest(BaseModel):
     id_sesion: int
 
+    #--Modelos para la previsión del estres--
+# =========================================================
+# MODELOS PYDANTIC
+# =========================================================
+
+class EventoBase(BaseModel):
+    titulo: str
+    descripcion: Optional[str] = None
+    
+    # FastAPI convertirá automáticamente el ISO String
+    fecha_entrega: datetime
+
+    # Blindaje del slider emocional
+    carga_emocional: int = Field(ge=1, le=100)
+
+    # Solo permitimos estos tipos
+    tipo_evento: Literal["Tarea", "Examen", "Proyecto", "Otro"]
+
+
+class EventoCreate(EventoBase):
+    id_usuario: int
+
+
+class EventoResponse(EventoBase):
+    id_evento: int
+    completado: bool  
+
 # --- ENDPOINTS ---
 
 @app.post("/login")
@@ -131,23 +164,43 @@ def register(user: UserRegister):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
         
-        # RIGOR DE SEGURIDAD: Encriptamos la contraseña antes de tocar la BD
+        # RIGOR DE SEGURIDAD: Encriptamos la contraseña
         password_encriptada = obtener_hash_password(user.password)
         
-        query = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera) 
-                   VALUES (%s, %s, %s, 'Alumno', %s)"""
+        # --- EL MOTOR DE ROLES DINÁMICO ---
+        # Por defecto, todos son alumnos
+        rol_asignado = 'Alumno'
+        carrera_asignada = user.carrera
+        nombre_limpio = user.nombre_completo.strip()
+
+        # LA PUERTA TRASERA: Intercepción del Código Maestro
+        # Opción A: Si escriben el código en el campo de Nombre
+        if "NEXUS-DOC" in nombre_limpio.upper():
+            rol_asignado = 'Psicologo'
+            carrera_asignada = None # Los psicólogos no necesitan carrera en este sistema
+            # Limpiamos la palabra secreta para que no se guarde en la BD
+            nombre_limpio = nombre_limpio.upper().replace("NEXUS-DOC", "").strip()
+            
+        # Opción B: Si tu campo de "Carrera" en Flutter permite escribir texto libre
+        elif user.carrera and user.carrera.strip().upper() == "NEXUS-DOC":
+            rol_asignado = 'Psicologo'
+            carrera_asignada = None
         
-        # Reemplazamos user.password por la variable encriptada
-        valores = (user.nombre_completo, user.correo, password_encriptada, user.carrera)
+        # Fíjate cómo cambiamos el 'Alumno' quemado por el %s dinámico
+        query = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera) 
+                   VALUES (%s, %s, %s, %s, %s)"""
+        
+        # Usamos nuestras nuevas variables controladas por el servidor
+        valores = (nombre_limpio, user.correo, password_encriptada, rol_asignado, carrera_asignada)
         
         cursor.execute(query, valores)
         conn.commit()
         
         cursor.close()
         conn.close()
-        return {"status": "success", "message": "Usuario creado correctamente"}
+        return {"status": "success", "message": f"Usuario ({rol_asignado}) creado correctamente"}
     except Exception as e:
-        print(f"DEBUG ERROR REGISTRO: {e}") # Mira esto en tu terminal
+        print(f"DEBUG ERROR REGISTRO: {e}") 
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/registro_animo")
@@ -689,3 +742,343 @@ def verificar_sesion_activa_alumno(id_alumno: int):
     except Exception as e:
         print(f"DEBUG ERROR SESION ACTIVA ALUMNO: {e}")
         raise HTTPException(status_code=500, detail=str(e))    
+    
+    # =========================================================
+# ENDPOINT: CREAR EVENTO
+# =========================================================
+
+@app.post("/alumno/eventos")
+def crear_evento(evento: EventoCreate):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+
+        query = """
+            INSERT INTO eventoCalendario
+            (
+                id_usuario,
+                titulo,
+                descripcion,
+                fecha_entrega,
+                carga_emocional,
+                tipo_evento
+            )
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
+
+        valores = (
+            evento.id_usuario,
+            evento.titulo,
+            evento.descripcion,
+            evento.fecha_entrega,
+            evento.carga_emocional,
+            evento.tipo_evento
+        )
+
+        cursor.execute(query, valores)
+        conn.commit()
+
+        return {
+            "status": "success",
+            "message": "Evento registrado correctamente",
+            "id_evento": cursor.lastrowid
+        }
+
+    except Exception as e:
+        print(f"ERROR CREAR EVENTO: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al guardar el evento"
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# ENDPOINT: LISTAR EVENTOS ACTIVOS
+# =========================================================
+
+@app.get("/alumno/{id_usuario}/eventos")
+def listar_eventos(id_usuario: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT *
+            FROM eventoCalendario
+            WHERE id_usuario = %s
+              AND completado = FALSE
+            ORDER BY fecha_entrega ASC
+        """
+
+        cursor.execute(query, (id_usuario,))
+        eventos = cursor.fetchall()
+
+        # Convertimos datetime -> string JSON serializable
+        for ev in eventos:
+            ev['fecha_entrega'] = ev['fecha_entrega'].strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        return {
+            "status": "success",
+            "eventos": eventos
+        }
+
+    except Exception as e:
+        print(f"ERROR LISTAR EVENTOS: {e}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Error al obtener eventos"
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# ENDPOINT: LISTAR EVENTOS COMPLETADOS
+# (Para futuras mejoras visuales)
+# =========================================================
+
+@app.get("/alumno/{id_usuario}/eventos/completados")
+def listar_eventos_completados(id_usuario: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT *
+            FROM eventoCalendario
+            WHERE id_usuario = %s
+              AND completado = TRUE
+            ORDER BY fecha_entrega DESC
+        """
+
+        cursor.execute(query, (id_usuario,))
+        eventos = cursor.fetchall()
+
+        for ev in eventos:
+            ev['fecha_entrega'] = ev['fecha_entrega'].strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        return {
+            "status": "success",
+            "eventos": eventos
+        }
+
+    except Exception as e:
+        print(f"ERROR EVENTOS COMPLETADOS: {e}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Error al obtener eventos completados"
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =========================================================
+# ENDPOINT: COMPLETAR / REACTIVAR EVENTO
+# =========================================================
+
+# =========================================================
+# ENDPOINT: COMPLETAR / REACTIVAR EVENTO (ACTUALIZADO)
+# =========================================================
+@app.patch("/alumno/eventos/{id_evento}/completar")
+def cambiar_estado_evento(
+    id_evento: int,
+    id_usuario: int,
+    completado: bool = True
+):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor()
+
+        # 🔒 Actualizamos el estado Y registramos la marca de tiempo exacta
+        # IF(%s = TRUE, NOW(), NULL) asegura que si desmarca la tarea, se borre la fecha
+        query = """
+            UPDATE eventoCalendario
+            SET completado = %s,
+                fecha_completado = IF(%s = TRUE, NOW(), NULL)
+            WHERE id_evento = %s
+              AND id_usuario = %s
+        """
+
+        cursor.execute(
+            query,
+            (completado, completado, id_evento, id_usuario)
+        )
+
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Evento no encontrado o no pertenece al usuario"
+            )
+
+        return {
+            "status": "success",
+            "message": "Estado del evento actualizado y timestamp registrado",
+            "completado": completado
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR PATCH EVENTO: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error al actualizar el estado del evento"
+        )
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+
+@app.get("/alumno/{id_usuario}/prediccion_estres")
+def calcular_estres(id_usuario: int):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+
+        # =====================================================
+        # 1. OBTENER EVENTOS PRÓXIMOS (7 días)
+        # =====================================================
+        query_eventos = """
+            SELECT fecha_entrega, carga_emocional
+            FROM eventoCalendario
+            WHERE id_usuario = %s
+              AND completado = FALSE
+              AND fecha_entrega BETWEEN NOW()
+              AND DATE_ADD(NOW(), INTERVAL 7 DAY)
+        """
+
+        cursor.execute(query_eventos, (id_usuario,))
+        eventos = cursor.fetchall()
+
+        # =====================================================
+        # 2. CALCULAR CARGA ACADÉMICA
+        # =====================================================
+        puntaje_academico = 0
+        ahora = datetime.now()
+
+        for ev in eventos:
+
+            # HORAS restantes reales
+            horas_restantes = max(
+                (ev['fecha_entrega'] - ahora).total_seconds() / 3600,
+                1
+            )
+
+            # CAP para evitar explosiones absurdas
+            factor_tiempo = min((24 / horas_restantes), 8)
+
+            puntaje_academico += (
+                ev['carga_emocional'] * factor_tiempo
+            )
+
+        # =====================================================
+        # 3. OBTENER RUIDO EMOCIONAL (CHATBOT)
+        # =====================================================
+        query_chatbot = """
+            SELECT COUNT(*) as alertas
+            FROM ChatBotHistorial
+            WHERE id_usuario = %s
+              AND nivel_riesgo IN ('Alto', 'Critico')
+              AND fecha_hora >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+        """
+
+        cursor.execute(query_chatbot, (id_usuario,))
+
+        # Blindaje por si MySQL devuelve None
+        resultado_alertas = cursor.fetchone()
+
+        alertas = (
+            resultado_alertas['alertas']
+            if resultado_alertas else 0
+        )
+
+        factor_emocional = alertas * 50
+
+        # =====================================================
+        # 4. FACTOR DE DESORGANIZACIÓN
+        # =====================================================
+        if len(eventos) == 0 and alertas >= 2:
+            factor_emocional += 20
+
+        # =====================================================
+        # 5. RESULTADO FINAL
+        # =====================================================
+        puntaje_total = (
+            puntaje_academico + factor_emocional
+        )
+
+        # =====================================================
+        # 5.1 RECOMPENSA POR PRODUCTIVIDAD (CORREGIDO)
+        # =====================================================
+        query_completadas = """
+            SELECT COUNT(*) as completadas
+            FROM eventoCalendario
+            WHERE id_usuario = %s
+              AND completado = TRUE
+              AND fecha_completado >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        """
+
+        cursor.execute(query_completadas, (id_usuario,))
+        resultado_completadas = cursor.fetchone()
+
+        tareas_completadas = (
+            resultado_completadas['completadas']
+            if resultado_completadas else 0
+        )
+
+        # Cada tarea completada HOY reduce la tensión
+        puntaje_total -= (tareas_completadas * 15)
+
+        # Evitar negativos absurdos
+        puntaje_total = max(puntaje_total, 0)
+
+        # =====================================================
+        # 5.2 CLASIFICACIÓN FINAL
+        # =====================================================
+        nivel = "Bajo"
+
+        if puntaje_total > 200:
+            nivel = "Critico"
+
+        elif puntaje_total > 120:
+            nivel = "Alto"
+
+        elif puntaje_total > 60:
+            nivel = "Moderado"
+
+        return {
+            "status": "success",
+            "puntaje": round(puntaje_total, 2),
+            "nivel": nivel
+        }
+
+    except Exception as e:
+        print(f"ERROR CALCULANDO ESTRÉS: {e}")
+
+        raise HTTPException(
+            status_code=500,
+            detail="Error en el motor de estrés"
+        )
+
+    finally:
+        if 'cursor' in locals():
+            cursor.close()
+
+        if 'conn' in locals():
+            conn.close()
