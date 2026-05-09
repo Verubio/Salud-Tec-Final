@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:salud_tec_final/api_config.dart';
+import 'dart:ui';
+import 'package:salud_tec_final/screens/avatar_emocional.dart';
 
 class PrincipalScreen extends StatefulWidget {
   const PrincipalScreen({super.key});
@@ -18,6 +20,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   String _gifPrincipal = 'assets/carita_estable.gif';
   Color _colorFondo = Colors.blue.withOpacity(0.1);
   String _nivelEstres = "Bajo";
+  Color _colorEstado = Colors.green;
   double _puntajeEstres = 0;
 
   Color _obtenerColorSegunNivel(String nivel) {
@@ -72,7 +75,7 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // didChangeDependencies se ejecuta varias veces, por eso usamos el flag
+    // Evita llamadas múltiples al reconstruirse el widget
     if (!_peticionRealizada) {
       _obtenerHistorial();
 
@@ -80,8 +83,12 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
           ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
 
       if (args != null && args['id_usuario'] != null) {
-        _obtenerEstadoRapido(args['id_usuario']);
+        final int idUsuario = args['id_usuario'];
+
+        // 🔥 Obtener estrés y aura emocional
+        _obtenerEstadoRapido(idUsuario);
       }
+
       _peticionRealizada = true;
     }
   }
@@ -140,6 +147,9 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
           setState(() {
             _nivelEstres = data['nivel'];
             _puntajeEstres = (data['puntaje'] as num).toDouble();
+
+            // 🔥 NUEVO
+            _colorEstado = _obtenerColorSegunNivel(_nivelEstres);
           });
         }
       }
@@ -214,6 +224,25 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
   }
 
   // --- FIN DE NUEVAS FUNCIONES ---
+
+  // =========================================
+  // 🧠 EXTRAER NÚMERO DE CONTROL
+  // =========================================
+  String _extraerNumeroControl(String correo) {
+    if (correo.isEmpty) return "Desconocido";
+
+    final partes = correo.split('@');
+
+    if (partes.length == 2 && partes[0].toLowerCase().startsWith('l')) {
+      final posibleNumero = partes[0].substring(1);
+
+      if (RegExp(r'^\d+$').hasMatch(posibleNumero)) {
+        return posibleNumero;
+      }
+    }
+
+    return "No disponible";
+  }
 
   String _obtenerGifDeEmocion(String nombre) {
     switch (nombre) {
@@ -319,6 +348,238 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+
+      drawer: Builder(
+        builder: (context) {
+          final Map<String, dynamic> args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>? ??
+              {};
+
+          final String nombreUsuario = args['nombre'] ?? "Estudiante";
+
+          final String correoUsuario = args['correo'] ?? "Sin correo";
+
+          return Drawer(
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(35),
+                bottomRight: Radius.circular(35),
+              ),
+
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+
+                      colors: [
+                        Colors.white.withOpacity(0.90),
+
+                        _colorEstado.withOpacity(0.10),
+                      ],
+                    ),
+
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.25),
+                      width: 1.5,
+                    ),
+                  ),
+
+                  child: Column(
+                    children: [
+                      // ======================================
+                      // HEADER VIVO
+                      // ======================================
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 800),
+
+                        width: double.infinity,
+
+                        padding: EdgeInsets.only(
+                          top: MediaQuery.of(context).padding.top + 28,
+                          bottom: 28,
+                          left: 22,
+                          right: 22,
+                        ),
+
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              _colorEstado.withOpacity(0.95),
+
+                              _colorEstado.withOpacity(0.65),
+                            ],
+                          ),
+
+                          borderRadius: const BorderRadius.only(
+                            bottomRight: Radius.circular(40),
+                          ),
+
+                          boxShadow: [
+                            BoxShadow(
+                              color: _colorEstado.withOpacity(0.35),
+
+                              blurRadius: 30,
+                              spreadRadius: 2,
+
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+
+                        child: Row(
+                          children: [
+                            Hero(
+                              tag: "avatar_principal",
+
+                              child: AvatarEmocional(
+                                nombreCompleto: nombreUsuario,
+
+                                nivelEstres: _nivelEstres,
+
+                                radio: 36,
+                              ),
+                            ),
+
+                            const SizedBox(width: 16),
+
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+
+                                children: [
+                                  Text(
+                                    nombreUsuario,
+
+                                    maxLines: 1,
+
+                                    overflow: TextOverflow.ellipsis,
+
+                                    style: const TextStyle(
+                                      color: Colors.white,
+
+                                      fontSize: 18,
+
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 5),
+
+                                  Text(
+                                    correoUsuario,
+
+                                    maxLines: 1,
+
+                                    overflow: TextOverflow.ellipsis,
+
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      _itemDrawerPremium(
+                        icono: Icons.badge_outlined,
+                        titulo: "Número de Control",
+                        subtitulo: _extraerNumeroControl(correoUsuario),
+                        color: _colorEstado,
+                      ),
+
+                      _itemDrawerPremium(
+                        icono: Icons.school_outlined,
+                        titulo: "Carrera",
+                        subtitulo: "Ing. Sistemas Computacionales",
+                        color: _colorEstado,
+                      ),
+
+                      const Spacer(),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+
+                          onTap: () {
+                            Navigator.pushNamedAndRemoveUntil(
+                              context,
+                              '/',
+                              (route) => false,
+                            );
+                          },
+
+                          child: Ink(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 16,
+                            ),
+
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.redAccent.withOpacity(0.85),
+
+                                  Colors.red.shade900.withOpacity(0.90),
+                                ],
+                              ),
+
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+
+                              children: [
+                                Icon(Icons.logout_rounded, color: Colors.white),
+
+                                SizedBox(width: 10),
+
+                                Text(
+                                  "Cerrar sesión",
+
+                                  style: TextStyle(
+                                    color: Colors.white,
+
+                                    fontWeight: FontWeight.bold,
+
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
       appBar: AppBar(
         title: const Text("Nexus 4 - Salud-Tec"),
         backgroundColor: const Color(0xFF2C5F78),
@@ -331,31 +592,161 @@ class _PrincipalScreenState extends State<PrincipalScreen> {
           children: [
             Column(
               children: [
-                Container(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeInOut,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
-                    vertical: 15,
+                    vertical: 18,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF2C5F78),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    "¡Hola $nombreUsuario!\n$_mensajeActual",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF2C5F78),
+                        _colorEstado.withOpacity(0.85),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+
+                    borderRadius: BorderRadius.circular(28),
+
+                    boxShadow: [
+                      BoxShadow(
+                        color: _colorEstado.withOpacity(0.35),
+                        blurRadius: 25,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.08),
+                      width: 1.2,
                     ),
                   ),
+
+                  child: Row(
+                    children: [
+                      // =========================================
+                      // 🔥 AVATAR EMOCIONAL
+                      // =========================================
+                      AvatarEmocional(
+                        nombreCompleto: nombreUsuario,
+                        nivelEstres: _nivelEstres,
+                        radio: 30,
+                      ),
+
+                      const SizedBox(width: 15),
+
+                      // =========================================
+                      // 👋 MENSAJE PRINCIPAL
+                      // =========================================
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "¡Hola $nombreUsuario!",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+
+                            const SizedBox(height: 5),
+
+                            Text(
+                              _mensajeActual,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                height: 1.3,
+                              ),
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // =========================================
+                            // ✨ CHIP DE ESTADO
+                            // =========================================
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 500),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(30),
+
+                                border: Border.all(
+                                  color: _colorEstado.withOpacity(0.7),
+                                  width: 1.4,
+                                ),
+
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _colorEstado.withOpacity(0.35),
+                                    blurRadius: 15,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 500),
+                                    width: 10,
+                                    height: 10,
+
+                                    decoration: BoxDecoration(
+                                      color: _colorEstado,
+                                      shape: BoxShape.circle,
+
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: _colorEstado.withOpacity(0.8),
+                                          blurRadius: 10,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  const SizedBox(width: 8),
+
+                                  Text(
+                                    "Estrés $_nivelEstres",
+                                    style: TextStyle(
+                                      color: _colorEstado,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+
                 ClipPath(
                   clipper: TriangleClipper(),
                   child: Container(
-                    color: const Color(0xFF2C5F78),
-                    height: 10,
-                    width: 20,
+                    color: _colorEstado.withOpacity(0.85),
+                    height: 12,
+                    width: 26,
                   ),
                 ),
               ],
@@ -838,4 +1229,84 @@ class TriangleClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(TriangleClipper oldClipper) => false;
+}
+
+Widget _itemDrawerPremium({
+  required IconData icono,
+  required String titulo,
+  required String subtitulo,
+  required Color color,
+  VoidCallback? onTap,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+
+    child: Material(
+      color: Colors.transparent,
+
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+
+        onTap: onTap,
+
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.55),
+
+            borderRadius: BorderRadius.circular(20),
+
+            border: Border.all(color: Colors.white.withOpacity(0.25)),
+          ),
+
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+
+                  shape: BoxShape.circle,
+                ),
+
+                child: Icon(icono, color: color, size: 22),
+              ),
+
+              const SizedBox(width: 15),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                  children: [
+                    Text(
+                      titulo,
+
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    Text(
+                      subtitulo,
+
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
