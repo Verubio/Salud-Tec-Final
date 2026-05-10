@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:salud_tec_final/api_config.dart';
+import 'package:salud_tec_final/screens/verificar_token_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,10 +15,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _passwordController = TextEditingController(); // Solo necesitamos este controlador
 
   String? _carreraSeleccionada;
   bool _isLoading = false;
+  bool _obscurePassword = true; // Controla la visibilidad del único campo
+
+
 
   final List<String> _carreras = [
     'Ing. Sistemas Computacionales',
@@ -41,37 +45,76 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
+    final url = Uri.parse('${ApiConfig.baseUrl}/register');
+
     try {
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/register'),
+        url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'nombre_completo': _nameController.text.trim(),
           'correo': _emailController.text.trim(),
-          'password': _passwordController.text,
+          'password': _passwordController.text.trim(),
           'carrera': _carreraSeleccionada,
         }),
       );
 
-      if (!mounted) return;
-
       if (response.statusCode == 201 || response.statusCode == 200) {
+        // 1. Decodificamos la respuesta para obtener el id_usuario
+        final data = jsonDecode(response.body);
+
+        if (!mounted) return;
+
         _mostrarMensaje(
+<<<<<<< HEAD
           "¡Yei! Registro exitoso ✨ Ya puedes iniciar sesión.",
           const Color(0xFFA5D6A7), // Verde pastel para éxito
         );
         Navigator.pop(context);
       } else {
+=======
+          "¡Registro exitoso! Revisa tu correo institucional.",
+          Colors.green,
+        );
+
+        // 2. Navegamos a la pantalla de verificación enviando el ID
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VerificarTokenScreen(idUsuario: data['id_usuario']),
+          ),
+        );
+      } 
+      else if (response.statusCode == 400) {
+        // --- CASO CLAVE: El correo no existe o es inválido ---
+        final errorData = jsonDecode(response.body);
+        if (!mounted) return;
+        
+        _mostrarMensaje(
+          "El correo no parece ser real o no puede recibir mensajes.",
+          Colors.orange, // Usamos naranja para advertencia de existencia
+        );
+      } 
+      else {
+        // Errores de servidor o base de datos (500)
+>>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
         final error = jsonDecode(response.body);
+        if (!mounted) return;
         _mostrarMensaje(
           error['detail'] ?? "Ups, hubo un error al registrar 🙈",
           const Color(0xFFFFB6C1), // Rosa pastel para error (aquí queda bajito)
         );
       }
     } catch (e) {
+      if (!mounted) return;
       _mostrarMensaje(
+<<<<<<< HEAD
         "Error de conexión. ¿El servidor está dormidito? 💤",
         const Color(0xFFFFB6C1),
+=======
+        "Error de conexión. Revisa que el servidor FastAPI esté encendido.",
+        Colors.redAccent,
+>>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -80,12 +123,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _mostrarMensaje(String mensaje, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
+<<<<<<< HEAD
       SnackBar(
         content: Text(mensaje, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF5D737E))),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+=======
+      SnackBar(content: Text(mensaje), backgroundColor: color),
+>>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
     );
   }
 
@@ -130,6 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 children: [
                   const SizedBox(height: 60), // Un poquito más de espacio arriba
 
+<<<<<<< HEAD
                   // --- Icono Principal: Amarillo con resplandor Amarillo ---
                   Container(
                     padding: const EdgeInsets.all(20),
@@ -141,6 +189,91 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           color: colorAmarillo.withOpacity(0.7), // Resplandor amarillo owo
                           blurRadius: 25,
                           spreadRadius: 8,
+=======
+              // Campo: Nombre Completo
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: "Nombre Completo",
+                  prefixIcon: Icon(Icons.person),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) =>
+                    value!.isEmpty ? "Ingresa tu nombre" : null,
+              ),
+              const SizedBox(height: 15),
+
+              // Campo: Correo Institucional
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: "Correo @slp.tecnm.mx",
+                  prefixIcon: Icon(Icons.email),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || !value.endsWith('@slp.tecnm.mx')) {
+                    return "Debe ser correo institucional";
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 15),
+
+              // Dropdown: Carrera
+              DropdownButtonFormField<String>(
+                value: _carreraSeleccionada, // Corregido de initialValue a value
+                decoration: const InputDecoration(
+                  labelText: "Carrera",
+                  prefixIcon: Icon(Icons.school),
+                  border: OutlineInputBorder(),
+                ),
+                items: _carreras
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (val) => setState(() => _carreraSeleccionada = val),
+                validator: (val) =>
+                    val == null ? "Selecciona tu carrera" : null,
+              ),
+              const SizedBox(height: 15),
+
+              // ÚNICO CAMPO DE CONTRASEÑA CON EL OJITO
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: "Contraseña",
+                  prefixIcon: const Icon(Icons.lock),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      color: const Color(0xFF2C5F78),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
+                ),
+                validator: (value) =>
+                    value!.length < 6 ? "Mínimo 6 caracteres" : null,
+              ),
+              const SizedBox(height: 30),
+
+              _isLoading
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                      onPressed: _registrarUsuario,
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 55),
+                        backgroundColor: const Color(0xFF2C5F78),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+>>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
                         ),
                       ],
                     ),
@@ -255,6 +388,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
+<<<<<<< HEAD
 
   // --- Helpers de UI actualizados con los nuevos colores ---
 
@@ -361,4 +495,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
+=======
+>>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
 }

@@ -16,6 +16,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController =
       ScrollController(); // Para bajar el chat al último mensaje
 
+  String? _token;
   List<dynamic> _mensajes = [];
   int? _idSesion;
   int _idAlumno = 0;
@@ -32,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final args =
         ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>?;
     if (args != null) {
+      _token = args['token']; // Recibimos el token que mandamos desde el Login
       _idAlumno = args['id_alumno'];
       _idPsicologo = args['id_psicologo'];
       _nombrePsicologo = args['nombre_psicologo'];
@@ -157,6 +159,11 @@ class _ChatScreenState extends State<ChatScreen> {
       // Usamos el nuevo endpoint de sincronización (GET)
       final response = await http.get(
         Uri.parse('${ApiConfig.baseUrl}/chat/$_idSesion/sync'),
+        headers: {
+        'Content-Type': 'application/json',
+        // ESTA ES LA LÍNEA QUE ACTIVA EL CHAT:
+        'Authorization': 'Bearer $_token', 
+      },
       );
 
       if (response.statusCode == 200) {
