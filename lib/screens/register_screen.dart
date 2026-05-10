@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:salud_tec_final/api_config.dart';
+import 'package:salud_tec_final/screens/verificar_token_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,10 +15,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _passwordController = TextEditingController(); // Solo necesitamos este controlador
 
   String? _carreraSeleccionada;
   bool _isLoading = false;
+  bool _obscurePassword = true; // Controla la visibilidad del único campo
+
+
 
   // Lista de carreras según el catálogo del ITSLP
   final List<String> _carreras = [
@@ -42,36 +46,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
+    final url = Uri.parse('${ApiConfig.baseUrl}/register');
+
     try {
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/register'),
+        url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'nombre_completo': _nameController.text.trim(),
           'correo': _emailController.text.trim(),
-          'password': _passwordController.text,
+          'password': _passwordController.text.trim(),
           'carrera': _carreraSeleccionada,
         }),
       );
 
-      if (!mounted) return;
-
       if (response.statusCode == 201 || response.statusCode == 200) {
+        // 1. Decodificamos la respuesta para obtener el id_usuario
+        final data = jsonDecode(response.body);
+
+        if (!mounted) return;
+
         _mostrarMensaje(
-          "¡Registro exitoso! Ya puedes iniciar sesión.",
+          "¡Registro exitoso! Revisa tu correo institucional.",
           Colors.green,
         );
-        Navigator.pop(context); // Regresa al Login
-      } else {
+
+        // 2. Navegamos a la pantalla de verificación enviando el ID
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VerificarTokenScreen(idUsuario: data['id_usuario']),
+          ),
+        );
+      } 
+      else if (response.statusCode == 400) {
+        // --- CASO CLAVE: El correo no existe o es inválido ---
+        final errorData = jsonDecode(response.body);
+        if (!mounted) return;
+        
+        _mostrarMensaje(
+          "El correo no parece ser real o no puede recibir mensajes.",
+          Colors.orange, // Usamos naranja para advertencia de existencia
+        );
+      } 
+      else {
+        // Errores de servidor o base de datos (500)
         final error = jsonDecode(response.body);
+        if (!mounted) return;
         _mostrarMensaje(
           error['detail'] ?? "Error al registrar.",
           Colors.redAccent,
         );
       }
     } catch (e) {
+      if (!mounted) return;
       _mostrarMensaje(
-        "Error de conexión. Revisa el servidor.",
+        "Error de conexión. Revisa que el servidor FastAPI esté encendido.",
         Colors.redAccent,
       );
     } finally {
@@ -80,9 +110,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _mostrarMensaje(String mensaje, Color color) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(mensaje), backgroundColor: color));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(mensaje), backgroundColor: color),
+    );
   }
 
   @override
@@ -139,7 +169,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               // Dropdown: Carrera
               DropdownButtonFormField<String>(
-                initialValue: _carreraSeleccionada,
+                value: _carreraSeleccionada, // Corregido de initialValue a value
                 decoration: const InputDecoration(
                   labelText: "Carrera",
                   prefixIcon: Icon(Icons.school),
@@ -154,14 +184,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 15),
 
-              // Campo: Contraseña
+              // ÚNICO CAMPO DE CONTRASEÑA CON EL OJITO
               TextFormField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
                   labelText: "Contraseña",
-                  prefixIcon: Icon(Icons.lock),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      color: const Color(0xFF2C5F78),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
                 validator: (value) =>
                     value!.length < 6 ? "Mínimo 6 caracteres" : null,

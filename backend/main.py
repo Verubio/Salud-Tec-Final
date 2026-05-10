@@ -15,11 +15,56 @@ from typing import Optional, Literal
 from datetime import datetime
 from fastapi import HTTPException
 import mysql.connector
-
+import smtplib
+from email.mime.text import MIMEText
+import random  # <--- AÑADE ESTO AQUÍ ARRIBA
+import re
+import jwt # Si no lo tienes, corre: pip install pyjwt
+from datetime import datetime, timedelta
 
 # Configuración del encriptador (Bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+SECRET_KEY = "NEXUS_4_SECRET_KEY_ITSLP"
+
+def crear_token_acceso(data: dict):
+    to_encode = data.copy()
+    # El token expirará en 24 horas
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+
+def enviar_token_email(correo_destino, token):
+    # 1. FILTRO DE RIGOR ACADÉMICO (Nexus 4)
+    # Valida que sea estrictamente: una 'l' minúscula, 8 números y el dominio del Tec
+    patron_itp = r'^l\d{8}@slp\.tecnm\.mx$'
+    
+    if not re.match(patron_itp, correo_destino.lower()):
+        print(f"DEBUG: El correo {correo_destino} no cumple el formato l + matrícula.")
+        return False
+
+    remitente = "nexus4.itsp.soporte@gmail.com" 
+    password_app = "hkpc ylyk zxly yhkt"
+    
+    msg = MIMEText(f"Tu código de activación para Salud-Tec es: {token}")
+    msg['Subject'] = 'Verificación Nexus 4'
+    msg['From'] = remitente
+    msg['To'] = correo_destino
+
+    try:
+        # Usamos puerto 587 (TLS) que es más estricto con los destinatarios
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(remitente, password_app)
+        
+        # Al enviar como lista [correo_destino], obligamos al servidor a validar el buzón
+        server.sendmail(remitente, [correo_destino], msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"DEBUG: Error al enviar: {e}")
+        return False
+    
 # Función para encriptar
 def obtener_hash_password(password: str):
     return pwd_context.hash(password)
@@ -56,7 +101,7 @@ app.add_middleware(
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': 'Luis2911', 
+    'password': 'RosiePosie_11', 
     'database': 'nexus4_db'
 }
 
@@ -96,6 +141,9 @@ class EstadoDisponibilidadRequest(BaseModel):
 class FinalizarSesionRequest(BaseModel):
     id_sesion: int
 
+class TokenCheckRequest(BaseModel):
+    id_usuario: int
+    token: str
     #--Modelos para la previsión del estres--
 # =========================================================
 # MODELOS PYDANTIC
@@ -131,78 +179,83 @@ def login(request: LoginRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # 1. Buscamos SOLO por correo
-        query = "SELECT id_usuario, nombre_completo, rol, esta_disponible, password_hash FROM Usuario WHERE correo_institucional = %s"
+        # IMPORTANTE: Debemos traer el password_hash y el estado_verificacion
+        query = "SELECT id_usuario, nombre_completo, rol, esta_disponible, password_hash, estado_verificacion FROM Usuario WHERE correo_institucional = %s"
         cursor.execute(query, (request.correo,))
         user = cursor.fetchone()
         
+        if not user:
+            raise HTTPException(status_code=401, detail="Usuario no encontrado")
+
+        if not verificar_password(request.password, user['password_hash']):
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+            
+        if not user['estado_verificacion']:
+            raise HTTPException(status_code=403, detail="Cuenta no verificada")
+            
+        # --- AGREGA ESTO AQUÍ ---
+        token = crear_token_acceso(data={"sub": str(user['id_usuario']), "rol": user['rol']})
+
+        return {
+            "status": "success",
+            "access_token": token,  # <--- Esta es la llave que Flutter necesita
+            "token_type": "bearer",
+            "user": {
+            "id_usuario": user['id_usuario'],
+            "nombre_completo": user['nombre_completo'],
+            
+            "rol": user['rol']
+        }
+    }
+    # ... resto del bloque try/except ...
+        
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=str(err))
+    finally:
         cursor.close()
         conn.close()
-        
-        # 2. Verificamos que el usuario exista y que la contraseña coincida con el hash
-        if not user or not verificar_password(request.password, user['password_hash']):
-            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
-            
-        # Si sobrevive la validación, le damos acceso (no devuelvas el hash al celular)
-        return {
-            "status": "success", 
-            "user": {
-                "id_usuario": user['id_usuario'], 
-                "nombre_completo": user['nombre_completo'], 
-                "rol": user['rol'], 
-                "esta_disponible": user['esta_disponible']
-            }
-        }
-            
-    except Exception as e:
-        print(f"DEBUG ERROR LOGIN: {e}") # Esto imprimirá el error real en tu consola
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/register")
 def register(user: UserRegister):
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    
     try:
-        conn = mysql.connector.connect(**db_config)
-        cursor = conn.cursor()
-        
-        # RIGOR DE SEGURIDAD: Encriptamos la contraseña
+        # 1. Generar datos necesarios
         password_encriptada = obtener_hash_password(user.password)
-        
-        # --- EL MOTOR DE ROLES DINÁMICO ---
-        # Por defecto, todos son alumnos
-        rol_asignado = 'Alumno'
-        carrera_asignada = user.carrera
-        nombre_limpio = user.nombre_completo.strip()
+        token_6 = str(random.randint(100000, 999999))
 
-        # LA PUERTA TRASERA: Intercepción del Código Maestro
-        # Opción A: Si escriben el código en el campo de Nombre
-        if "NEXUS-DOC" in nombre_limpio.upper():
-            rol_asignado = 'Psicologo'
-            carrera_asignada = None # Los psicólogos no necesitan carrera en este sistema
-            # Limpiamos la palabra secreta para que no se guarde en la BD
-            nombre_limpio = nombre_limpio.upper().replace("NEXUS-DOC", "").strip()
-            
-        # Opción B: Si tu campo de "Carrera" en Flutter permite escribir texto libre
-        elif user.carrera and user.carrera.strip().upper() == "NEXUS-DOC":
-            rol_asignado = 'Psicologo'
-            carrera_asignada = None
+        # 2. VALIDACIÓN DE CORREO (Punto Crítico)
+        # Intentamos enviar el correo ANTES de confirmar la transacción en la BD
+        if not enviar_token_email(user.correo, token_6):
+            raise HTTPException(
+                status_code=400, 
+                detail="El correo institucional no es válido o no existe. Usa l + matrícula."
+            )
+
+        # 3. Si el correo es válido, procedemos a guardar
+        query_user = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera, estado_verificacion) 
+                        VALUES (%s, %s, %s, 'Alumno', %s, FALSE)"""
+        cursor.execute(query_user, (user.nombre_completo, user.correo, password_encriptada, user.carrera))
+        id_nuevo = cursor.lastrowid
+
+        cursor.execute("INSERT INTO TokenVerificacion (id_usuario, token) VALUES (%s, %s)", (id_nuevo, token_6))
         
-        # Fíjate cómo cambiamos el 'Alumno' quemado por el %s dinámico
-        query = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera) 
-                   VALUES (%s, %s, %s, %s, %s)"""
-        
-        # Usamos nuestras nuevas variables controladas por el servidor
-        valores = (nombre_limpio, user.correo, password_encriptada, rol_asignado, carrera_asignada)
-        
-        cursor.execute(query, valores)
+        # 4. Confirmamos cambios en la base de datos
         conn.commit()
-        
+        return {"status": "success", "id_usuario": id_nuevo}
+
+    except HTTPException as he:
+        if conn: conn.rollback()
+        raise he
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Error: {e}")
+        raise HTTPException(status_code=500, detail="Error interno del servidor")
+    finally:
         cursor.close()
         conn.close()
-        return {"status": "success", "message": f"Usuario ({rol_asignado}) creado correctamente"}
-    except Exception as e:
-        print(f"DEBUG ERROR REGISTRO: {e}") 
-        raise HTTPException(status_code=500, detail=str(e))
-
+    
 @app.post("/registro_animo")
 def registrar_animo(request: RegistroRequest):
     try:
@@ -248,7 +301,30 @@ def obtener_historial(id_usuario: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
+@app.post("/verificar_token")
+def verificar_token(req: TokenCheckRequest):
+    try:
+        conn = mysql.connector.connect(**db_config)
+        cursor = conn.cursor(dictionary=True)
+        
+        # Verificar si el token coincide y no ha sido usado
+        query = "SELECT id_token FROM TokenVerificacion WHERE id_usuario = %s AND token = %s AND usado = FALSE"
+        cursor.execute(query, (req.id_usuario, req.token))
+        token_db = cursor.fetchone()
+        
+        if not token_db:
+            raise HTTPException(status_code=400, detail="Token inválido")
+            
+        # Actualizar estado del usuario y quemar el token
+        cursor.execute("UPDATE Usuario SET estado_verificacion = TRUE WHERE id_usuario = %s", (req.id_usuario,))
+        cursor.execute("UPDATE TokenVerificacion SET usado = TRUE WHERE id_usuario = %s", (req.id_usuario,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return {"status": "success", "message": "Cuenta verificada"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # 🧠 PROMPT OPTIMIZADO

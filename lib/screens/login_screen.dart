@@ -16,6 +16,8 @@ class _LoginScreenState extends State<LoginScreen> {
       TextEditingController(); // <-- NUEVO: Controlador para contraseña
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _obscurePassword = true;
+
 
   // Buena práctica: liberar los controladores cuando el widget se destruye
   @override
@@ -44,50 +46,76 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        
+        // --- MODIFICACIÓN CLAVE: Extraer el token de acceso ---
+        final String? accessToken = data['access_token']; 
+        
+        // Extraemos el objeto 'user'
+        final userData = data['user']; 
 
-        final String nombreUsuario = data['user']['nombre_completo'];
-        final int idUsuario = data['user']['id_usuario'];
-        final String rolUsuario =
-            data['user']['rol']; // <-- RIGOR: Capturamos el rol
+        final String nombreUsuario = userData['nombre_completo'];
+        final int idUsuario = userData['id_usuario'];
+        final String rolUsuario = userData['rol']; 
+        
+        final bool estaDisponible = userData['esta_disponible'] == 1 || userData['esta_disponible'] == true;
 
         if (!mounted) return;
 
-        // BIFURCACIÓN LÓGICA BASADA EN ROLES (RBAC)
+        _mostrarMensaje("¡Bienvenido, $nombreUsuario!", Colors.green);
+
+        // 2. BIFURCACIÓN LÓGICA (Pasando el token en los arguments)
         if (rolUsuario == 'Psicologo') {
           Navigator.pushReplacementNamed(
             context,
-            '/psicologo_home', // <-- Ruta hacia la estación de mando del psicólogo
+            '/psicologo_home',
             arguments: {
-              'nombre': nombreUsuario,
+              'token': accessToken, // <--- MANDAMOS EL TOKEN
               'id_usuario': idUsuario,
-              'esta_disponible':
-                  data['user']['esta_disponible'] == 1 ||
-                  data['user']['esta_disponible'] == true,
+              'nombre': nombreUsuario,
+              'rol': rolUsuario,
+              
+              'esta_disponible': estaDisponible,
             },
           );
         } else {
-          // Asumimos 'Alumno' por defecto (o Administrador si lo configuras luego)
+          // Rol: Alumno
           Navigator.pushReplacementNamed(
             context,
             '/home',
-            arguments: {'nombre': nombreUsuario, 'id_usuario': idUsuario},
+            arguments: {
+              'token': accessToken, // <--- MANDAMOS EL TOKEN
+              'id_usuario': idUsuario, 
+              'nombre': nombreUsuario,
+              'rol': rolUsuario,
+            },
           );
         }
-      } else {
+      } 
+      else if (response.statusCode == 403) {
+        if (!mounted) return;
+        _mostrarError(
+          "Tu cuenta aún no ha sido activada desde el correo institucional.",
+          esAdvertencia: true,
+        );
+      } 
+      else {
+        if (!mounted) return;
         _mostrarError("Credenciales incorrectas o usuario no encontrado.");
       }
     } catch (e) {
-      _mostrarError(
-        "No se pudo conectar con el servidor. Revisa que FastAPI esté corriendo.",
-      );
+      if (!mounted) return;
+      _mostrarError("Error de conexión. Asegúrate de que el servidor esté activo.");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
-  void _mostrarError(String mensaje) {
+  // Modificamos un poco la función de error para que acepte color naranja en advertencias
+  void _mostrarError(String mensaje, {bool esAdvertencia = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje), backgroundColor: Colors.redAccent),
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: esAdvertencia ? Colors.orange : Colors.redAccent,
+      ),
     );
   }
 
@@ -138,18 +166,26 @@ class _LoginScreenState extends State<LoginScreen> {
                 // <-- NUEVO: Campo de Contraseña
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: true, // Oculta el texto
-                  decoration: const InputDecoration(
+                  obscureText: _obscurePassword, // Controla la visibilidad
+                  decoration: InputDecoration(
                     labelText: "Contraseña",
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
+                    prefixIcon: const Icon(Icons.lock),
+                    border: const OutlineInputBorder(),
+                    // BOTÓN DEL OJITO
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                        color: const Color(0xFF2C5F78),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Por favor ingresa tu contraseña";
-                    }
-                    return null;
-                  },
+                  validator: (value) =>
+                      value == null || value.isEmpty ? "Ingresa tu contraseña" : null,
                 ),
                 const SizedBox(height: 30),
                 _isLoading
@@ -188,6 +224,16 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+  // Esta es la función que te falta para que el error desaparezca
+  void _mostrarMensaje(String mensaje, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
