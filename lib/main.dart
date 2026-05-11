@@ -22,27 +22,49 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Salud-Tec',
-      debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner:
+          false, // ¡Adiós a la cintilla roja de "Debug"!
       theme: ThemeData(
         useMaterial3: true,
-        // Aplicando la paleta "Serenidad y Confianza"
+        // ==========================================
+        // 🎨 ADN VISUAL: PALETA OCEAN BREEZE / KAWAII
+        // ==========================================
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 221, 115, 203),
-          primary: const Color.fromARGB(255, 128, 200, 236),
-          secondary: const Color(0xFF84A98C),
-          surface: const Color(0xFFF8F9FA),
+          seedColor: const Color(0xFF4DB6AC), // Teal Suave (Acento principal)
+          primary: const Color(
+            0xFF2C5F78,
+          ), // Azul Institucional (Textos fuertes)
+          secondary: const Color(0xFFE1BEE7), // Lavanda Suave
+          tertiary: const Color(0xFF81C784), // Verde Menta Pastel
+          surface: const Color(0xFFF5F7FA), // Fondo gris-azulado muy clarito
         ),
-        // Configurando tipografías (Asegúrate de agregarlas a pubspec.yaml)
+        // Configurando tipografías globales
         fontFamily: 'Inter',
         textTheme: const TextTheme(
           displayLarge: TextStyle(
             fontFamily: 'Montserrat',
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
             color: Color(0xFF2C5F78),
           ),
           titleLarge: TextStyle(
             fontFamily: 'Montserrat',
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF455A64),
+          ),
+          bodyMedium: TextStyle(
+            fontFamily: 'Inter',
+            color: Color(0xFF5D737E),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        // Estilo global por defecto para botones, por si alguien olvida estilizarlos
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF4DB6AC),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
           ),
         ),
       ),

@@ -22,10 +22,16 @@ import re
 import jwt # Si no lo tienes, corre: pip install pyjwt
 from datetime import datetime, timedelta
 
+
+# --- CONFIGURACIÓN DE VARIABLES DE ENTORNO ---
+# Carga las variables del archivo .env a la memoria
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+
 # Configuración del encriptador (Bcrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = "NEXUS_4_SECRET_KEY_ITSLP"
 
 def crear_token_acceso(data: dict):
     to_encode = data.copy()
@@ -44,7 +50,7 @@ def enviar_token_email(correo_destino, token):
         return False
 
     remitente = "nexus4.itsp.soporte@gmail.com" 
-    password_app = "hkpc ylyk zxly yhkt"
+    EMAIL_PASSWORD_APP = os.getenv("EMAIL_PASSWORD_APP")
     
     msg = MIMEText(f"Tu código de activación para Salud-Tec es: {token}")
     msg['Subject'] = 'Verificación Nexus 4'
@@ -76,8 +82,6 @@ def verificar_password(plain_password: str, hashed_password: str):
 app = FastAPI()
 
 # --- CONFIGURACIÓN DE GEMINI ---
-# Carga las variables del archivo .env a la memoria
-load_dotenv() 
 
 # Extrae la llave de la memoria de forma segura
 api_key = os.getenv("GEMINI_API_KEY")
@@ -99,10 +103,10 @@ app.add_middleware(
 )
 
 db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'RosiePosie_11', 
-    'database': 'nexus4_db'
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME")
 }
 
 # --- MODELOS DE DATOS ---
@@ -181,7 +185,8 @@ def login(request: LoginRequest):
         
         # IMPORTANTE: Debemos traer el password_hash y el estado_verificacion
         query = "SELECT id_usuario, nombre_completo, rol, esta_disponible, password_hash, estado_verificacion FROM Usuario WHERE correo_institucional = %s"
-        cursor.execute(query, (request.correo,))
+        correo_limpio = request.correo.strip().lower()
+        cursor.execute(query, (correo_limpio,))
         user = cursor.fetchone()
         
         if not user:
@@ -222,12 +227,13 @@ def register(user: UserRegister):
     
     try:
         # 1. Generar datos necesarios
+        correo_limpio = user.correo.strip().lower()
         password_encriptada = obtener_hash_password(user.password)
         token_6 = str(random.randint(100000, 999999))
 
         # 2. VALIDACIÓN DE CORREO (Punto Crítico)
         # Intentamos enviar el correo ANTES de confirmar la transacción en la BD
-        if not enviar_token_email(user.correo, token_6):
+        if not enviar_token_email(correo_limpio, token_6):
             raise HTTPException(
                 status_code=400, 
                 detail="El correo institucional no es válido o no existe. Usa l + matrícula."
@@ -236,7 +242,7 @@ def register(user: UserRegister):
         # 3. Si el correo es válido, procedemos a guardar
         query_user = """INSERT INTO Usuario (nombre_completo, correo_institucional, password_hash, rol, carrera, estado_verificacion) 
                         VALUES (%s, %s, %s, 'Alumno', %s, FALSE)"""
-        cursor.execute(query_user, (user.nombre_completo, user.correo, password_encriptada, user.carrera))
+        cursor.execute(query_user, (user.nombre_completo, correo_limpio, password_encriptada, user.carrera))
         id_nuevo = cursor.lastrowid
 
         cursor.execute("INSERT INTO TokenVerificacion (id_usuario, token) VALUES (%s, %s)", (id_nuevo, token_6))
@@ -504,7 +510,22 @@ def iniciar_sesion_chat(req: InicioChatRequest):
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor(dictionary=True)
         
-        # 1. Buscamos si ya existe una sesión activa entre ellos
+        # ========================================================
+        # 🛡️ BLINDAJE ABSOLUTO: REGLA CERO (Va al principio)
+        # ========================================================
+        query_disponibilidad = "SELECT esta_disponible FROM Usuario WHERE id_usuario = %s AND rol = 'Psicologo'"
+        cursor.execute(query_disponibilidad, (req.id_psicologo,))
+        psicologo = cursor.fetchone()
+        
+        # Si el doc no existe o su switch está en FALSE, abortamos inmediatamente
+        if not psicologo or psicologo['esta_disponible'] == 0:
+            cursor.close()
+            conn.close()
+            raise HTTPException(status_code=400, detail="El profesional ya no se encuentra disponible.")
+
+        # ========================================================
+        # 1. Si está disponible, buscamos si ya existe una sesión
+        # ========================================================
         query_sesion = """SELECT id_sesion FROM SesionChat 
                           WHERE id_alumno = %s AND id_psicologo = %s AND esta_activa = TRUE"""
         cursor.execute(query_sesion, (req.id_alumno, req.id_psicologo))
@@ -515,6 +536,7 @@ def iniciar_sesion_chat(req: InicioChatRequest):
             query_disponibilidad = "SELECT esta_disponible FROM Usuario WHERE id_usuario = %s AND rol = 'Psicologo'"
             cursor.execute(query_disponibilidad, (req.id_psicologo,))
             psicologo = cursor.fetchone()
+            pass
             
             # Si el doc no existe o su switch está en FALSE, abortamos la misión
             if not psicologo or psicologo['esta_disponible'] == 0:
@@ -580,6 +602,17 @@ def actualizar_disponibilidad(req: EstadoDisponibilidadRequest):
                    WHERE id_usuario = %s AND rol = 'Psicologo'"""
         
         cursor.execute(query, (req.esta_disponible, req.id_psicologo))
+        # ========================================================
+        # 💣 EL GOLPE MAESTRO: MATAR SESIONES ACTIVAS
+        # ========================================================
+        if req.esta_disponible == False:
+            query_cerrar = """
+                UPDATE SesionChat 
+                SET esta_activa = FALSE 
+                WHERE id_psicologo = %s AND esta_activa = TRUE
+            """
+            cursor.execute(query_cerrar, (req.id_psicologo,))
+
         conn.commit()
         
         cursor.close()

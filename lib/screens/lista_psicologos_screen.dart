@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:salud_tec_final/api_config.dart';
+import 'dart:ui'; // Para el Glassmorphism
 
 class ListaPsicologosScreen extends StatefulWidget {
   const ListaPsicologosScreen({super.key});
@@ -20,7 +21,13 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
     _obtenerPsicologos();
   }
 
+  // =========================================
+  // ⚙️ LÓGICA DE SERVIDOR (INTACTA)
+  // =========================================
   Future<void> _obtenerPsicologos() async {
+    setState(
+      () => _isLoading = true,
+    ); // Para que el loader se vea si actualizan manualmente
     try {
       final response = await http.get(
         Uri.parse("${ApiConfig.baseUrl}/psicologos_disponibles"),
@@ -42,7 +49,18 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
 
   void _mostrarError(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(mensaje), backgroundColor: Colors.redAccent),
+      SnackBar(
+        content: Text(
+          mensaje,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
     );
   }
 
@@ -79,6 +97,7 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
           context,
           '/chat',
           arguments: {
+            'token': args['token'], // Pasamos el token en la cadena de custodia
             'id_alumno': idAlumno,
             'id_psicologo': psicologo['id_usuario'],
             'nombre_psicologo': psicologo['nombre_completo'],
@@ -88,9 +107,16 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
         );
       } else if (response.statusCode == 400) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("El profesional acaba de desconectarse."),
-            backgroundColor: Colors.orange,
+          SnackBar(
+            content: const Text(
+              "El profesional acaba de desconectarse.",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.orange.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
           ),
         );
         _obtenerPsicologos();
@@ -103,125 +129,271 @@ class _ListaPsicologosScreenState extends State<ListaPsicologosScreen> {
     }
   }
 
+  // =========================================
+  // 🎨 UI PREMIUM
+  // =========================================
   @override
   Widget build(BuildContext context) {
+    const colorPrimario = Color(0xFF2C5F78);
+    const colorFondoCyan = Color(0xFFE0F7FA);
+    const colorFondoMenta = Color(0xFFF1F8E9);
+    const colorAcento = Color(0xFF4DB6AC);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA), // Un fondo relajante
-      appBar: AppBar(
-        title: const Text("Atención Psicológica"),
-        backgroundColor: const Color(0xFF2C5F78),
-        foregroundColor: Colors.white,
-        elevation: 0,
+      extendBodyBehindAppBar: true,
+
+      // 🔷 HEADER GLASSMORPHISM
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: AppBar(
+              title: const Text(
+                "Especialistas en Línea",
+                style: TextStyle(
+                  color: colorPrimario,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              backgroundColor: Colors.white.withOpacity(0.65),
+              elevation: 0,
+              iconTheme: const IconThemeData(color: colorPrimario),
+              centerTitle: true,
+            ),
+          ),
+        ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _psicologos.isEmpty
-          ? _buildEstadoVacio() // Manejo riguroso del estado sin datos
-          : _buildListaPsicologos(),
+
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [colorFondoCyan, colorFondoMenta],
+          ),
+        ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator(color: colorAcento))
+            : _psicologos.isEmpty
+            ? _buildEstadoVacio(colorPrimario, colorAcento)
+            : RefreshIndicator(
+                color: colorAcento,
+                onRefresh: _obtenerPsicologos,
+                child: _buildListaPsicologos(colorPrimario, colorAcento),
+              ),
+      ),
     );
   }
 
-  // 🧠 Criterio 7.4 (Usabilidad): Manejo empático de excepciones
-  Widget _buildEstadoVacio() {
+  Widget _buildEstadoVacio(Color colorPrimario, Color colorAcento) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(30.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.event_busy, size: 80, color: Colors.grey),
-            const SizedBox(height: 20),
-            const Text(
-              "Sin psicólogos disponibles",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C5F78),
+      child: SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(), // Permite el Pull-to-Refresh incluso vacío
+        child: Padding(
+          padding: const EdgeInsets.all(30.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.7),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blueGrey.withOpacity(0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.nights_stay_rounded,
+                  size: 70,
+                  color: colorPrimario.withOpacity(0.6),
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              "En este momento no hay profesionales en línea. Por favor, intenta más tarde o visita la Biblioteca de Recursos si necesitas apoyo inmediato.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton(
-              onPressed: _obtenerPsicologos,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2C5F78),
+              const SizedBox(height: 30),
+              Text(
+                "Nuestros especialistas están descansando",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: colorPrimario,
+                  height: 1.2,
+                ),
               ),
-              child: const Text(
-                "Actualizar lista",
-                style: TextStyle(color: Colors.white),
+              const SizedBox(height: 15),
+              const Text(
+                "En este momento no hay profesionales en línea.\n\nPor favor, intenta más tarde o visita la Biblioteca de Recursos si necesitas apoyo inmediato.",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 15,
+                  height: 1.5,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 40),
+              ElevatedButton.icon(
+                onPressed: _obtenerPsicologos,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                label: const Text(
+                  "Actualizar Lista",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: colorPrimario,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 25,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  elevation: 3,
+                  shadowColor: colorPrimario.withOpacity(0.5),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildListaPsicologos() {
+  Widget _buildListaPsicologos(Color colorPrimario, Color colorAcento) {
     return ListView.builder(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + kToolbarHeight + 20,
+        left: 20,
+        right: 20,
+        bottom: 30,
+      ),
       itemCount: _psicologos.length,
       itemBuilder: (context, index) {
         final psi = _psicologos[index];
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blueGrey.withOpacity(0.08),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-          margin: const EdgeInsets.only(bottom: 15),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 10,
-            ),
-            leading: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 25,
-                  backgroundColor: const Color(0xFF5ED3C6),
-                  child: Text(
-                    psi['nombre_completo'][0]
-                        .toUpperCase(), // Primera letra del nombre
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(25),
+              onTap: () => _iniciarChat(psi),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    // Avatar con indicador de estado
+                    Stack(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: colorAcento.withOpacity(0.3),
+                              width: 2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 28,
+                            backgroundColor: colorAcento.withOpacity(0.15),
+                            child: Text(
+                              psi['nombre_completo'][0].toUpperCase(),
+                              style: TextStyle(
+                                color: colorPrimario,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 24,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.shade400,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.greenAccent.withOpacity(0.5),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: Colors.greenAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                    const SizedBox(width: 20),
+
+                    // Info del Psicólogo
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Dr. ${psi['nombre_completo'].split(' ')[0]}", // Muestra el primer nombre o título
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Color(0xFF455A64),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Especialista disponible",
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+
+                    // Icono de acción
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colorPrimario.withOpacity(0.05),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_rounded,
+                        color: colorPrimario,
+                        size: 22,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-            title: Text(
-              psi['nombre_completo'],
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: const Text(
-              "Disponible ahora",
-              style: TextStyle(color: Colors.green),
-            ),
-            trailing: const Icon(
-              Icons.chat_bubble_outline,
-              color: Color(0xFF2C5F78),
-            ),
-            onTap: () => _iniciarChat(psi),
           ),
         );
       },

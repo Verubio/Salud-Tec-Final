@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:salud_tec_final/api_config.dart';
-import 'package:salud_tec_final/screens/verificar_token_screen.dart';
+import 'package:salud_tec_final/screens/verificar_token_screen.dart'; // Lógica de Vianney
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -15,13 +15,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController(); // Solo necesitamos este controlador
+  final _passwordController = TextEditingController();
 
   String? _carreraSeleccionada;
   bool _isLoading = false;
-  bool _obscurePassword = true; // Controla la visibilidad del único campo
-
-
+  bool _obscurePassword = true; // Controla el ojito de Vianney
 
   final List<String> _carreras = [
     'Ing. Sistemas Computacionales',
@@ -41,9 +39,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _registrarUsuario() async {
+    // =========================================
+    // 🛡️ EVITA DOBLE CLICK / DOBLE REQUEST
+    // =========================================
+    if (_isLoading) return;
+
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    // Oculta teclado
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isLoading = true;
+    });
 
     final url = Uri.parse('${ApiConfig.baseUrl}/register');
 
@@ -51,101 +59,97 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
+
         body: jsonEncode({
           'nombre_completo': _nameController.text.trim(),
-          'correo': _emailController.text.trim(),
-          'password': _passwordController.text.trim(),
+
+          // 🔥 Blindaje contra mayúsculas/minúsculas
+          'correo': _emailController.text.trim().toLowerCase(),
+
+          'password': _passwordController.text,
+
           'carrera': _carreraSeleccionada,
         }),
       );
 
+      if (!mounted) return;
+
+      // =========================================
+      // ✅ REGISTRO EXITOSO
+      // =========================================
       if (response.statusCode == 201 || response.statusCode == 200) {
-        // 1. Decodificamos la respuesta para obtener el id_usuario
         final data = jsonDecode(response.body);
 
-        if (!mounted) return;
-
         _mostrarMensaje(
-<<<<<<< HEAD
-          "¡Yei! Registro exitoso ✨ Ya puedes iniciar sesión.",
-          const Color(0xFFA5D6A7), // Verde pastel para éxito
-        );
-        Navigator.pop(context);
-      } else {
-=======
-          "¡Registro exitoso! Revisa tu correo institucional.",
-          Colors.green,
+          "¡Registro exitoso! Revisa tu correo institucional ✨",
+          const Color(0xFFA5D6A7),
         );
 
-        // 2. Navegamos a la pantalla de verificación enviando el ID
-        Navigator.push(
+        // 🔥 IMPORTANTE:
+        // pushReplacement para que NO puedan volver
+        // al register con botón atrás
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => VerificarTokenScreen(idUsuario: data['id_usuario']),
+            builder: (context) =>
+                VerificarTokenScreen(idUsuario: data['id_usuario']),
           ),
         );
-      } 
-      else if (response.statusCode == 400) {
-        // --- CASO CLAVE: El correo no existe o es inválido ---
-        final errorData = jsonDecode(response.body);
-        if (!mounted) return;
-        
-        _mostrarMensaje(
-          "El correo no parece ser real o no puede recibir mensajes.",
-          Colors.orange, // Usamos naranja para advertencia de existencia
-        );
-      } 
+      }
+      // =========================================
+      // ⚠️ ERROR CONTROLADO DEL BACKEND
+      // =========================================
       else {
-        // Errores de servidor o base de datos (500)
->>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
-        final error = jsonDecode(response.body);
-        if (!mounted) return;
-        _mostrarMensaje(
-          error['detail'] ?? "Ups, hubo un error al registrar 🙈",
-          const Color(0xFFFFB6C1), // Rosa pastel para error (aquí queda bajito)
-        );
+        String mensaje = "No se pudo completar el registro.";
+
+        try {
+          final error = jsonDecode(response.body);
+
+          mensaje = error['detail'] ?? mensaje;
+        } catch (_) {}
+
+        _mostrarMensaje(mensaje, Colors.redAccent);
       }
     } catch (e) {
       if (!mounted) return;
-      _mostrarMensaje(
-<<<<<<< HEAD
-        "Error de conexión. ¿El servidor está dormidito? 💤",
-        const Color(0xFFFFB6C1),
-=======
-        "Error de conexión. Revisa que el servidor FastAPI esté encendido.",
-        Colors.redAccent,
->>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
-      );
+
+      _mostrarMensaje("Error de conexión con el servidor.", Colors.redAccent);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
+  // SnackBar estilizado de Fátima
   void _mostrarMensaje(String mensaje, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-<<<<<<< HEAD
       SnackBar(
-        content: Text(mensaje, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF5D737E))),
+        content: Text(
+          mensaje,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF5D737E),
+          ),
+        ),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
-=======
-      SnackBar(content: Text(mensaje), backgroundColor: color),
->>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- NUEVA PALETA DE COLORES ACTUALIZADA owo ---
-    const colorFondoAzul = Color(0xFFE3F2FD);   // Azul cielo muy claro
-    const colorFondoVerde = Color(0xFFE8F5E9);  // Verde menta muy claro
-    const colorLavanda = Color(0xFFE1BEE7);      // Lavanda pastel (Principal)
-    const colorAmarillo = Color(0xFFFFF59D);     // Amarillo pastel (Acento icono)
-    const colorRosaPoquito = Color(0xFFFFD1DC);  // Rosa pastel (Solo para carga)
-    const colorTextoPrimario = Color(0xFF5D737E); // Gris azulado para textos
-    const colorIconosCampos = Color(0xFF9575CD);  // Lavanda un poco más fuerte para iconos
+    const colorFondoAzul = Color(0xFFE3F2FD);
+    const colorFondoVerde = Color(0xFFE8F5E9);
+    const colorLavanda = Color(0xFFE1BEE7);
+    const colorAmarillo = Color(0xFFFFF59D);
+    const colorRosaPoquito = Color(0xFFFFD1DC);
+    const colorTextoPrimario = Color(0xFF5D737E);
+    const colorIconosCampos = Color(0xFF9575CD);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -153,8 +157,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          // Icono de flecha ahora en Lavanda fuerte
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: colorIconosCampos),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: colorIconosCampos,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -169,16 +175,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 24.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 30.0,
+              vertical: 24.0,
+            ),
             child: Form(
               key: _formKey,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const SizedBox(height: 60), // Un poquito más de espacio arriba
+                  const SizedBox(height: 60),
 
-<<<<<<< HEAD
-                  // --- Icono Principal: Amarillo con resplandor Amarillo ---
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -186,111 +193,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: colorAmarillo.withOpacity(0.7), // Resplandor amarillo owo
+                          color: colorAmarillo.withOpacity(0.7),
                           blurRadius: 25,
                           spreadRadius: 8,
-=======
-              // Campo: Nombre Completo
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: "Nombre Completo",
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value!.isEmpty ? "Ingresa tu nombre" : null,
-              ),
-              const SizedBox(height: 15),
-
-              // Campo: Correo Institucional
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: "Correo @slp.tecnm.mx",
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || !value.endsWith('@slp.tecnm.mx')) {
-                    return "Debe ser correo institucional";
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 15),
-
-              // Dropdown: Carrera
-              DropdownButtonFormField<String>(
-                value: _carreraSeleccionada, // Corregido de initialValue a value
-                decoration: const InputDecoration(
-                  labelText: "Carrera",
-                  prefixIcon: Icon(Icons.school),
-                  border: OutlineInputBorder(),
-                ),
-                items: _carreras
-                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                    .toList(),
-                onChanged: (val) => setState(() => _carreraSeleccionada = val),
-                validator: (val) =>
-                    val == null ? "Selecciona tu carrera" : null,
-              ),
-              const SizedBox(height: 15),
-
-              // ÚNICO CAMPO DE CONTRASEÑA CON EL OJITO
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: "Contraseña",
-                  prefixIcon: const Icon(Icons.lock),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                      color: const Color(0xFF2C5F78),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-                validator: (value) =>
-                    value!.length < 6 ? "Mínimo 6 caracteres" : null,
-              ),
-              const SizedBox(height: 30),
-
-              _isLoading
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton(
-                      onPressed: _registrarUsuario,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 55),
-                        backgroundColor: const Color(0xFF2C5F78),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
->>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
                         ),
                       ],
                     ),
                     child: const Icon(
                       Icons.auto_awesome,
-                      size: 65, // Un pelín más grande
-                      color: colorAmarillo, // Icono Amarillo
+                      size: 65,
+                      color: colorAmarillo,
                     ),
                   ),
                   const SizedBox(height: 25),
                   Text(
                     "Crea tu cuenta",
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: colorTextoPrimario,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                        ),
+                      color: colorTextoPrimario,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -299,14 +221,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 35),
 
-                  // --- Campos de texto usando acentos Lavanda ---
                   _buildSoftTextField(
                     controller: _nameController,
                     label: "Nombre Completo",
                     hint: "Tu nombrecito",
                     icon: Icons.person_rounded,
                     iconColor: colorIconosCampos,
-                    validator: (value) => value!.isEmpty ? "¡No olvides tu nombre!" : null,
+                    validator: (value) =>
+                        value!.isEmpty ? "¡No olvides tu nombre!" : null,
                   ),
                   const SizedBox(height: 18),
 
@@ -332,53 +254,100 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     icon: Icons.school_rounded,
                     iconColor: colorIconosCampos,
                     items: _carreras,
-                    onChanged: (val) => setState(() => _carreraSeleccionada = val),
+                    onChanged: (val) =>
+                        setState(() => _carreraSeleccionada = val),
                   ),
                   const SizedBox(height: 18),
 
+                  // Integración del "Ojito" de Vianney en el diseño de Fátima
                   _buildSoftTextField(
                     controller: _passwordController,
                     label: "Contraseña",
                     hint: "Crea una clave segura",
                     icon: Icons.lock_rounded,
                     iconColor: colorIconosCampos,
-                    isPassword: true,
-                    validator: (value) => value!.length < 6 ? "Mínimo 6 caracteres para estar seguros 🔒" : null,
+                    isPassword: true, // Le decimos al helper que es un password
+                    validator: (value) => value!.length < 6
+                        ? "Mínimo 6 caracteres para estar seguros 🔒"
+                        : null,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility
+                            : Icons.visibility_off,
+                        color: colorIconosCampos.withOpacity(0.7),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
                   ),
                   const SizedBox(height: 45),
 
-                  // --- Botón de Registro: Ahora es Lavanda ---
-                  _isLoading
-                      ? const CircularProgressIndicator(color: colorRosaPoquito) // Rosa solo aquí
-                      : ElevatedButton(
-                          onPressed: _registrarUsuario,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colorLavanda, // Fondo Lavanda owo
-                            foregroundColor: colorTextoPrimario, // Texto gris suave
-                            elevation: 5,
-                            shadowColor: colorLavanda.withOpacity(0.5),
-                            padding: const EdgeInsets.symmetric(vertical: 18), // Más altito
-                            minimumSize: const Size(double.infinity, 60),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+
+                    child: _isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: CircularProgressIndicator(
+                              color: colorRosaPoquito,
                             ),
-                            // Un toque rosa muy sutil al presionar (overlay)
-                            enabledMouseCursor: SystemMouseCursors.click,
-                          ).copyWith(
-                            overlayColor: WidgetStateProperty.resolveWith<Color?>(
-                              (Set<WidgetState> states) {
-                                if (states.contains(WidgetState.pressed)) {
-                                  return colorRosaPoquito.withOpacity(0.3);
-                                }
-                                return null;
-                              },
+                          )
+                        : SizedBox(
+                            width: double.infinity,
+
+                            child: ElevatedButton(
+                              onPressed: _registrarUsuario,
+
+                              style:
+                                  ElevatedButton.styleFrom(
+                                    backgroundColor: colorLavanda,
+                                    foregroundColor: colorTextoPrimario,
+                                    elevation: 5,
+                                    shadowColor: colorLavanda.withOpacity(0.5),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 18,
+                                    ),
+                                    minimumSize: const Size(
+                                      double.infinity,
+                                      60,
+                                    ),
+
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(25),
+                                    ),
+
+                                    enabledMouseCursor:
+                                        SystemMouseCursors.click,
+                                  ).copyWith(
+                                    overlayColor:
+                                        WidgetStateProperty.resolveWith<Color?>(
+                                          (Set<WidgetState> states) {
+                                            if (states.contains(
+                                              WidgetState.pressed,
+                                            )) {
+                                              return colorRosaPoquito
+                                                  .withOpacity(0.3);
+                                            }
+                                            return null;
+                                          },
+                                        ),
+                                  ),
+
+                              child: const Text(
+                                "Finalizar Registro ✨",
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
                             ),
                           ),
-                          child: const Text(
-                            "Finalizar Registro ✨",
-                            style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, letterSpacing: 1),
-                          ),
-                        ),
+                  ),
                   const SizedBox(height: 30),
                 ],
               ),
@@ -388,19 +357,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-<<<<<<< HEAD
 
-  // --- Helpers de UI actualizados con los nuevos colores ---
+  // --- Helpers de UI actualizados (Modificado para aceptar suffixIcon y control de estado) ---
 
   Widget _buildSoftTextField({
     required TextEditingController controller,
     required String label,
     required String hint,
     required IconData icon,
-    required Color iconColor, // Nuevo parámetro
+    required Color iconColor,
     bool isPassword = false,
     bool isEmail = false,
     required String? Function(String?) validator,
+    Widget? suffixIcon, // <-- AGREGADO para el ojito
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -416,26 +385,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
       child: TextFormField(
         controller: controller,
-        obscureText: isPassword,
+        // Conectado directamente a la variable de estado
+        obscureText: isPassword ? _obscurePassword : false,
         keyboardType: isEmail ? TextInputType.emailAddress : TextInputType.text,
-        style: const TextStyle(color: Color(0xFF5D737E)), // Color de texto al escribir
+        style: const TextStyle(color: Color(0xFF5D737E)),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(color: Colors.black45),
           hintText: hint,
           hintStyle: const TextStyle(color: Colors.black26),
-          prefixIcon: Icon(icon, color: iconColor), // Icono Lavanda fuerte
+          prefixIcon: Icon(icon, color: iconColor),
+          suffixIcon: suffixIcon, // <-- INYECTADO
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-          // Borde sutil cuando el campo está seleccionado
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 20,
+            horizontal: 20,
+          ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: const BorderSide(color: Color(0xFFE1BEE7), width: 1), // Borde Lavanda sutil
+            borderSide: const BorderSide(color: Color(0xFFE1BEE7), width: 1),
           ),
         ),
         validator: validator,
@@ -447,7 +420,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required String? value,
     required String label,
     required IconData icon,
-    required Color iconColor, // Nuevo parámetro
+    required Color iconColor,
     required List<String> items,
     required void Function(String?) onChanged,
   }) {
@@ -466,35 +439,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
       child: DropdownButtonFormField<String>(
         value: value,
         isExpanded: true,
-        icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFB0BEC5)),
-        style: const TextStyle(color: Color(0xFF5D737E), fontSize: 16), // Estilo del texto seleccionado
+        icon: const Icon(
+          Icons.keyboard_arrow_down_rounded,
+          color: Color(0xFFB0BEC5),
+        ),
+        style: const TextStyle(color: Color(0xFF5D737E), fontSize: 16),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(color: Colors.black45),
-          prefixIcon: Icon(icon, color: iconColor), // Icono Lavanda fuerte
+          prefixIcon: Icon(icon, color: iconColor),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: Colors.transparent,
-          contentPadding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-            focusedBorder: OutlineInputBorder(
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 20,
+            horizontal: 12,
+          ),
+          focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: const BorderSide(color: Color(0xFFE1BEE7), width: 1), // Borde Lavanda sutil
+            borderSide: const BorderSide(color: Color(0xFFE1BEE7), width: 1),
           ),
         ),
-        // Color de fondo del menú desplegable
         dropdownColor: Colors.white,
-        items: items.map((c) => DropdownMenuItem(
-          value: c, 
-          child: Text(c, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Color(0xFF5D737E)))
-        )).toList(),
+        items: items
+            .map(
+              (c) => DropdownMenuItem(
+                value: c,
+                child: Text(
+                  c,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF5D737E)),
+                ),
+              ),
+            )
+            .toList(),
         onChanged: onChanged,
         validator: (val) => val == null ? "¡Selecciona tu carrera!" : null,
       ),
     );
   }
-=======
->>>>>>> 8f4657e58408b97946d19bf15c7231289731e169
 }
